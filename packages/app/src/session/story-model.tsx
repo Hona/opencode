@@ -294,7 +294,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
   )
 }
 
-// A static copy of the dock frame the extension host draws around the terminal panel.
+// A static copy of the dock frame the plugin host draws around the terminal panel.
 function SessionTerminalPreview(props: { terminal: NonNullable<SessionPreviewProps["terminal"]> }) {
   return (
     <aside

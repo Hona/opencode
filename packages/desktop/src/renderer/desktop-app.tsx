@@ -11,7 +11,7 @@ import {
   useCommand,
   useCurrentRoute,
   useLanguage,
-  useExtensionServers,
+  usePluginServers,
   useTabs,
   type LayoutRoute,
 } from "@opencode/app/desktop"
@@ -83,10 +83,10 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
   })
 
   function ReadyApp() {
-    const extensions = useExtensionServers()
+    const pluginServers = usePluginServers()
     const language = useLanguage()
 
-    const ready = createMemo(() => !firstLaunch.loading && !sidecar.loading && !locale.loading && extensions.ready())
+    const ready = createMemo(() => !firstLaunch.loading && !sidecar.loading && !locale.loading && pluginServers.ready())
 
     const servers = createMemo(() => {
       const data = initializationData(sidecar)
@@ -102,7 +102,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
         })
       }
 
-      list.push(...extensions.list())
+      list.push(...pluginServers.list())
 
       return list
     })

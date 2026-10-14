@@ -11,7 +11,7 @@ import type { SshController } from "./state"
 export type SshOffer = { visit: object | undefined }
 
 export function SshCover(props: { id: string; visit: object; ssh: SshController; offer: SshOffer }) {
-  const extension = usePlugin()
+  const plugin = usePlugin()
   const dialog = useDialog()
   const item = () => props.ssh.item(props.id)
 
@@ -45,16 +45,16 @@ export function SshCover(props: { id: string; visit: object; ssh: SshController;
           >
             <Icon name="lock" size="large" class="text-v2-icon-icon-muted" />
             <div class="flex max-w-sm flex-col items-center gap-2" role="status" aria-live="polite">
-              <h2 class="text-16-medium text-v2-text-text-base">{extension.t("session.disconnected")}</h2>
+              <h2 class="text-16-medium text-v2-text-text-base">{plugin.t("session.disconnected")}</h2>
               <bdi dir="auto" class="max-w-full break-all text-13-regular text-v2-text-text-muted">
                 {sshName(item().config)}
               </bdi>
-              <p class="text-13-regular text-v2-text-text-muted">{extension.t("session.reconnectDescription")}</p>
+              <p class="text-13-regular text-v2-text-text-muted">{plugin.t("session.reconnectDescription")}</p>
             </div>
             <Show when={item().error}>
               {(error) => (
                 <p role="alert" class="max-w-sm text-13-regular text-v2-text-text-muted">
-                  {extension.t(`error.${error()}`)}
+                  {plugin.t(`error.${error()}`)}
                 </p>
               )}
             </Show>
@@ -68,10 +68,10 @@ export function SshCover(props: { id: string; visit: object; ssh: SshController;
                 <Spinner class="size-3.5" />
               </Show>
               {connecting()
-                ? extension.t("session.connecting")
+                ? plugin.t("session.connecting")
                 : item().stage === "authentication"
-                  ? extension.t("action.authenticate")
-                  : extension.t("session.reconnect")}
+                  ? plugin.t("action.authenticate")
+                  : plugin.t("session.reconnect")}
             </Button>
           </section>
         )

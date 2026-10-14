@@ -5,7 +5,7 @@ import { Switch } from "@opencode/ui/switch"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
-import { ExtensionSettingsSections } from "@/runtime/extension/settings-page-view"
+import { PluginSettingsSections } from "@/runtime/plugin/settings-page-view"
 import {
   type FollowUpBehavior,
   type TerminalPlacement,
@@ -274,7 +274,7 @@ export const SettingsGeneral: Component = () => {
           </SettingsRow>
         </Show>
 
-        <ExtensionSettingsSections page="general" section="general" />
+        <PluginSettingsSections page="general" section="general" />
 
         <Show when={mobile()}>
           <SettingsRow
@@ -320,7 +320,7 @@ export const SettingsGeneral: Component = () => {
           </SettingsList>
         </section>
 
-        <ExtensionSettingsSections page="general" />
+        <PluginSettingsSections page="general" />
       </div>
     </>
   )

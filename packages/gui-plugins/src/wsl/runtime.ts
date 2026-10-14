@@ -66,7 +66,7 @@ export function shellEscape(value: string) {
   return `'${value.replace(/'/g, `'"'"'`)}'`
 }
 
-/** WSL commands; `t` resolves the extension's copy for errors the user sees. */
+/** WSL commands; `t` resolves the plugin's copy for errors the user sees. */
 export function createWslRuntime(t: MainContext["t"]) {
   const runWsl = (args: string[], opts: RunWslOptions = {}) => runCommand("wsl", args, opts)
 

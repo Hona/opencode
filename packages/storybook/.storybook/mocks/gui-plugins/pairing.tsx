@@ -33,7 +33,7 @@ export function pairingClient(): IpcClient<typeof Pairing.spec> {
 }
 
 /**
- * Stands in for the HostApis the pairing page reads that extension stories do not provide: its window store, dialogs
+ * Stands in for the HostApis the pairing page reads that plugin stories do not provide: its window store, dialogs
  * through the app's dialog stack, and a clipboard that accepts every copy.
  */
 export function PairingHost(props: { links?: Partial<Links>; children: JSX.Element }) {

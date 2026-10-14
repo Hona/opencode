@@ -1,3 +1,4 @@
+import { Match } from "effect"
 import { createEffect, createMemo, createUniqueId, For, on, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -83,7 +84,7 @@ export function SettingsSearch() {
       browser: platform.platform === "desktop",
       mobile: mobile(),
       translate: language.t,
-      extensions: surface.extensions.items(),
+      plugins: surface.plugins.items(),
     }),
   )
 
@@ -207,14 +208,13 @@ export function SettingsSearch() {
           search.expand()
           const index = shown().findIndex((item) => item.id === highlighted()?.id)
 
-          const next =
-            shown()[
-              event.key === "Home"
-                ? 0
-                : event.key === "End"
-                  ? shown().length - 1
-                  : Math.max(0, Math.min(shown().length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))
-            ]
+          const target = Match.value(event.key).pipe(
+            Match.when("Home", () => 0),
+            Match.when("End", () => shown().length - 1),
+            Match.orElse(() => Math.max(0, Math.min(shown().length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))),
+          )
+
+          const next = shown()[target]
 
           if (!next) return
           search.highlight(next.id)

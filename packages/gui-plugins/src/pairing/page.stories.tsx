@@ -20,8 +20,8 @@ const story = (urls: readonly string[], links?: { custom?: string; selected?: st
 })
 
 export default {
-  title: "Extensions/Pairing",
-  id: "extensions-pairing",
+  title: "Plugins/Pairing",
+  id: "plugins-pairing",
   parameters: {
     docs: {
       description: {

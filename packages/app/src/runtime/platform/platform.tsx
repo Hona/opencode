@@ -113,8 +113,8 @@ type PlatformBase = {
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
 
-  /** GUI extension bridge to the main-process extension host (desktop only). */
-  extensions?: Bridge
+  /** GUI plugin bridge to the main-process plugin host (desktop only). */
+  plugins?: Bridge
 }
 
 export type Platform = PlatformBase &

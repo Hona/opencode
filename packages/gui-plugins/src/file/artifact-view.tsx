@@ -37,7 +37,7 @@ type ArtifactInfo = {
   duration?: number
   rows?: number
   columns?: number
-  /** Facts an extension's viewer reports, already localized. */
+  /** Facts a plugin's viewer reports, already localized. */
   details?: readonly string[]
 }
 
@@ -127,7 +127,7 @@ export default function ArtifactView(props: {
 
   const size = () => formatBytes(locale.locale(), contentBytes(props.content))
 
-  // A kind the file view does not render itself goes to the first extension viewer that lists it.
+  // A kind the file view does not render itself goes to the first plugin viewer that lists it.
   const viewer = createMemo(() => {
     const value = kind()
 
@@ -824,7 +824,7 @@ function ArtifactFont(props: { path: string; content: FileContent }) {
 }
 
 /**
- * Hands a file to an extension's viewer, decoding its bytes once per loaded content; the viewer owns them, and may move
+ * Hands a file to a plugin's viewer, decoding its bytes once per loaded content; the viewer owns them, and may move
  * their buffer to a worker. Bytes the viewer rejects, and a viewer that throws, show the binary placeholder in this
  * area alone rather than the whole file panel failing.
  */

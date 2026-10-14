@@ -1,4 +1,4 @@
-// The part of the SSH extension's remote CLI scripts that WSL uses. Extensions share only contracts, so
+// The part of the SSH plugin's remote CLI scripts that WSL uses. Plugins share only contracts, so
 // keep the two copies in step.
 
 export function quote(value: string) {

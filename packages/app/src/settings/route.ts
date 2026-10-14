@@ -13,10 +13,10 @@ export type SettingsRootTab =
   | "plugins"
   | "about"
 
-declare const extensionTab: unique symbol
+declare const pluginTab: unique symbol
 
-/** A root page a GUI extension contributes; the value is its SettingsPage id. */
-export type SettingsExtensionTab = string & { readonly [extensionTab]: true }
+/** A root page a GUI plugin contributes; the value is its SettingsPage id. */
+export type SettingsPluginTab = string & { readonly [pluginTab]: true }
 
 export type SettingsServerTab = "general" | "projects" | "workspaces" | "providers" | "models" | "extensions"
 
@@ -38,7 +38,7 @@ type SettingsNestedView =
       parent: "root" | "server"
     }
 
-export type SettingsView = ({ type: "root"; tab: SettingsRootTab | SettingsExtensionTab } | SettingsNestedView) &
+export type SettingsView = ({ type: "root"; tab: SettingsRootTab | SettingsPluginTab } | SettingsNestedView) &
   SettingsViewState
 
 /** A view of a page the host owns. */
@@ -88,7 +88,7 @@ export function parseSettingsView(
   search: string,
   multipleServers: boolean,
   transient?: SettingsTransientView,
-  extensionTabs?: ReadonlySet<string>,
+  pluginTabs?: ReadonlySet<string>,
 ): SettingsView {
   const params = new URLSearchParams(search)
   const tab = params.get("tab") ?? "general"
@@ -115,7 +115,7 @@ export function parseSettingsView(
   if (!project && !server && isRootTab(tab))
     return { type: "root", tab, subtab: nested === "lsps" ? undefined : nested, ...transient }
 
-  if (!project && !server && extensionTabs && isExtensionTab(tab, extensionTabs))
+  if (!project && !server && pluginTabs && isPluginTab(tab, pluginTabs))
     return { type: "root", tab, subtab: undefined, ...transient }
 
   return { type: "root", tab: "general", ...transient }
@@ -163,8 +163,8 @@ export function isRootTab(value: string): value is SettingsRootTab {
   return Object.hasOwn(rootTabs, value)
 }
 
-/** Host tabs win over an extension page with the same id. */
-export function isExtensionTab(value: string, tabs: ReadonlySet<string>): value is SettingsExtensionTab {
+/** Host tabs win over a plugin page with the same id. */
+export function isPluginTab(value: string, tabs: ReadonlySet<string>): value is SettingsPluginTab {
   return !isRootTab(value) && tabs.has(value)
 }
 

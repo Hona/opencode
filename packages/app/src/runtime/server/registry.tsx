@@ -161,15 +161,15 @@ export namespace ServerConnection {
     reconnect?: (signal: AbortSignal) => Promise<HttpBase>
   } & Base
 
-  // A server a GUI extension contributes (e.g. SSH or WSL), keyed `${extension}:${id}`
-  export type Extension = {
-    type: "extension"
+  // A server a GUI plugin contributes (e.g. SSH or WSL), keyed `${plugin}:${id}`
+  export type Plugin = {
+    type: "plugin"
     key: string
-    extension: string
+    plugin: string
     state: ServerEntry["state"]
     connecting: boolean
     authenticationRequired: boolean
-    /** The extension re-resolves the endpoint (e.g. a tunnel), so the connection can drop and come back. */
+    /** The plugin re-resolves the endpoint (e.g. a tunnel), so the connection can drop and come back. */
     managed: boolean
     http: HttpBase
     reconnect?: (signal: AbortSignal) => Promise<HttpBase>
@@ -180,7 +180,7 @@ export namespace ServerConnection {
   export type Any =
     | Http
     // All these are desktop-only
-    | (Sidecar | Extension)
+    | (Sidecar | Plugin)
 
   export const key = (conn: Any): Key => {
     switch (conn.type) {
@@ -188,7 +188,7 @@ export namespace ServerConnection {
         return Key.make(conn.http.url)
       case "sidecar":
         return Key.make("sidecar")
-      case "extension":
+      case "plugin":
         return Key.make(conn.key)
     }
   }
@@ -199,7 +199,7 @@ export namespace ServerConnection {
   export const builtin = (conn: Any) => conn.type === "sidecar" && conn.variant === "base"
   /** Starts sign-in for a server that asks for it; false when it does not. */
   export const authenticate = (conn: Any, onConnected?: () => void) => {
-    if (conn.type !== "extension" || !conn.authenticationRequired || !conn.connect) return false
+    if (conn.type !== "plugin" || !conn.authenticationRequired || !conn.connect) return false
     void conn.connect().then((ready) => {
       if (ready) onConnected?.()
     })

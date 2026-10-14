@@ -23,7 +23,7 @@ export type DetailsPanelProps = {
   diffs?: readonly { additions: number; deletions: number }[]
   moveDismissed: boolean
   onMoveDismiss: () => void
-  /** Absent while the review extension is disabled, which also leaves `diffs` undefined. */
+  /** Absent while the review plugin is disabled, which also leaves `diffs` undefined. */
   onReview?: () => void
   disclosure: Disclosure
 }

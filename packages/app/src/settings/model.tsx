@@ -101,7 +101,7 @@ const placementOnlySchema = Persistence.struct({ placement: placementSchema })
 const generalSchema = Persistence.struct({
   // Retired preferences without readers; kept so stored values still decode and round-trip.
   autoSave: Persistence.optional(Schema.Boolean),
-  // Owned by the updater extension, which copies it out once; kept so settings rewrites cannot drop it first.
+  // Owned by the updater plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   releaseNotes: Persistence.optional(Schema.Boolean),
   showFileTree: Schema.Boolean,
   showNavigation: Persistence.optional(Schema.Boolean),
@@ -117,7 +117,7 @@ const generalSchema = Persistence.struct({
   }),
   showCustomAgents: Schema.Boolean,
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
-  // Owned by the review extension, which copies it out once; kept so settings rewrites cannot drop it first.
+  // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
   terminalPlacement: Schema.Literals(["side", "bottom"]),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
@@ -164,7 +164,7 @@ const soundsSchema = Persistence.struct({
 
 export const settingsSchema = Persistence.struct({
   general: generalSchema,
-  // Owned by the details extension, which copies it out once; kept so settings rewrites cannot drop it first.
+  // Owned by the details plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   sessionSummary: Schema.optional(
     Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
   ),

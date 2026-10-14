@@ -47,11 +47,11 @@ import { useSettingsSurface } from "./surface"
 import { settingsViewRedirect } from "./route"
 import { pageIcons } from "./pages"
 import { revealSettingsSearch } from "./search-reveal"
-import { ExtensionSettingsPages } from "@/runtime/extension/settings-page-view"
+import { PluginSettingsPages } from "@/runtime/plugin/settings-page-view"
 import "@/settings/settings.css"
 
 const PluginsSettings = lazy(() =>
-  import("@/runtime/extension/settings-plugins").then((module) => ({ default: module.PluginsSettings })),
+  import("@/runtime/plugin/settings-plugins").then((module) => ({ default: module.PluginsSettings })),
 )
 
 const rootClientTabs = [
@@ -282,7 +282,7 @@ function RootSettings() {
     {
       items: [
         ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
-        ...surface.extensions.pages().map((item) => ({
+        ...surface.plugins.pages().map((item) => ({
           value: item.value.id,
           icon: item.value.icon ?? pageIcons.extensions,
           label: item.value.title,
@@ -362,7 +362,7 @@ function RootSettings() {
       <Tabs.Content value="shortcuts" class="settings-panel">
         <SettingsKeybinds active={surface.view().tab === "shortcuts"} />
       </Tabs.Content>
-      <ExtensionSettingsPages />
+      <PluginSettingsPages />
       <Tabs.Content value="experimental" class="settings-panel">
         <SettingsExperimental />
       </Tabs.Content>

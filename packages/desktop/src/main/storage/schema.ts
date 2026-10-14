@@ -31,7 +31,7 @@ export const state = sqliteTable(
 // GUI plugin enable state, for built-in and plugin GUIs alike. A plugin gets a row only once its
 // enable state changes. `manifest` and `revision` are unused; they stay because 2.0.24 to 2.0.27
 // still read them, so a downgraded app can open this database.
-export const extension = sqliteTable("extension", {
+export const plugin = sqliteTable("extension", {
   id: text().primaryKey(),
   enabled: integer({ mode: "boolean" }).notNull().default(true),
   manifest: text(),

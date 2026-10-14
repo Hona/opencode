@@ -1,6 +1,6 @@
 # Built-in GUI plugins
 
-Every feature of the desktop and web app that is not the core shell is a built-in GUI plugin: the terminal, review, files, the browser, SSH, WSL, the updater and more. Each one builds only on the GUI plugin SDK in [`packages/plugin/src/gui`](../plugin/src/gui), the same `@opencode/plugin/gui` that third-party plugins use. The SDK is typed so that the common bugs fail to compile or fail the lint, and every declaration has TSDoc, so editor hovers answer most questions. This guide shows how the parts fit, with code from the plugins that ship. [Build your first plugin](#build-your-first-extension) walks through [`src/pairing`](src/pairing), a small built-in that uses both processes. `bun run lint` checks every code block marked with its source against that source.
+Every feature of the desktop and web app that is not the core shell is a built-in GUI plugin: the terminal, review, files, the browser, SSH, WSL, the updater and more. Each one builds only on the GUI plugin SDK in [`packages/plugin/src/gui`](../plugin/src/gui), the same `@opencode/plugin/gui` that third-party plugins use. The SDK is typed so that the common bugs fail to compile or fail the lint, and every declaration has TSDoc, so editor hovers answer most questions. This guide shows how the parts fit, with code from the plugins that ship. [Build your first plugin](#build-your-first-plugin) walks through [`src/pairing`](src/pairing), a small built-in that uses both processes. `bun run lint` checks every code block marked with its source against that source.
 
 - Window SDK: `@opencode/plugin/gui` ([`index.ts`](../plugin/src/gui/index.ts))
 - Main-process SDK: `@opencode/plugin/gui/main` ([`main.ts`](../plugin/src/gui/main.ts))
@@ -10,12 +10,12 @@ Every feature of the desktop and web app that is not the core shell is a built-i
 ```mermaid
 flowchart LR
   subgraph main["Electron main (desktop only)"]
-    mh["main host<br/>packages/desktop/src/main/extension"] --> me["main.ts entries"]
+    mh["main host<br/>packages/desktop/src/main/plugin"] --> me["main.ts entries"]
   end
   subgraph window["Each window (desktop or web)"]
-    wh["window host<br/>packages/app/src/runtime/extension"] --> we["renderer.tsx entries"]
+    wh["window host<br/>packages/app/src/runtime/plugin"] --> we["renderer.tsx entries"]
     we -- "ctx.add(Registry, item)" --> wh
-    we -- "Contract (in process)" --> other["other extensions"]
+    we -- "Contract (in process)" --> other["other plugins"]
   end
   me -- "Ipc: methods, state, events<br/>(schemas over the bridge)" --> we
 ```
@@ -428,13 +428,13 @@ The enable preference is separate from activation: an enabled plugin with an una
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | Composition compile checks | [`plugin/src/gui/compose.typecheck.ts`](../plugin/src/gui/compose.typecheck.ts), [`builtins.typecheck.ts`](src/builtins.typecheck.ts) | Duplicate plugin ids, missing or duplicate providers, wrong-process stores, readonly drafts, panel and slot inputs, no-input Ipc options |
 | Registry compile checks    | [`plugin/src/gui/registries.typecheck.ts`](../plugin/src/gui/registries.typecheck.ts)                                                 | A `MenuItem` field its menu ignores                                                                                                         |
-| Graph matrix               | `packages/app/component-tests/extension-graph.spec.ts`                                                           | A `requires` cycle; a consumer that fails when one optional provider is disabled                                                            |
+| Graph matrix               | `packages/app/component-tests/plugin-graph.spec.ts`                                                           | A `requires` cycle; a consumer that fails when one optional provider is disabled                                                            |
 | Keeper suites              | `packages/app/e2e/regression/`                                                                                   | What the user sees, per product area                                                                                                        |
 | Unit tests                 | `*.test.ts` beside the code                                                                                      | Pure logic with a contract: paths, migrations, protocols                                                                                    |
 | Lint gate                  | `bun run lint` (oxlint, ast-grep, `script/sdk-docs.ts`); `bun run lint:changed`                                  | Raw effects, app imports, module state, undocumented SDK, a guide block that differs from its shipping source                               |
 
 - Test a main entry through its `Ipc` contract with real inputs, not Electron mocks.
-- The hosts own their contracts: main storage in `packages/desktop/src/main/extension/storage.test.ts`, the real window host in `packages/app/component-tests/extension-host.spec.ts`. A plugin does not test them again.
+- The hosts own their contracts: main storage in `packages/desktop/src/main/plugin/storage.test.ts`, the real window host in `packages/app/component-tests/plugin-host.spec.ts`. A plugin does not test them again.
 - Drive the race the user hits: a reload during async work, a store that loads late, an Ipc that goes away and returns.
 
 ## Build your first plugin

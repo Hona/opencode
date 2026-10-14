@@ -87,7 +87,7 @@ const sessionTabsSchema = Persistence.struct({
 
 const sessionViewSchema = Persistence.struct({
   scroll: Persistence.record(Schema.Struct({ x: Schema.Finite, y: Schema.Finite })),
-  // Review state from before extensions. An extension copies each session's entry out once; nothing writes these
+  // Review state from before plugins. A plugin copies each session's entry out once; nothing writes these
   // any more, and they stay so layout rewrites cannot drop a session's entry before it is copied.
   reviewOpen: Schema.optional(Persistence.array(Schema.String)),
   reviewMode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
@@ -107,7 +107,7 @@ export const layoutSchema = Persistence.struct({
   terminal: Persistence.struct({ height: Schema.Finite, opened: Schema.Boolean }),
   review: Persistence.struct({
     panelOpened: Schema.Boolean,
-    // Owned by the review extension, which copies it out once; kept so layout rewrites cannot drop it first.
+    // Owned by the review plugin, which copies it out once; kept so layout rewrites cannot drop it first.
     diffStyle: Schema.optional(Schema.Literals(["unified", "split"])),
   }),
   fileTree: Persistence.struct({
@@ -217,7 +217,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     // Opening Home with its shortcut focuses session search, so typing filters immediately.
     let homeSearchFocus = false
 
-    // Names of other session-scoped stores, e.g. extension storage, so pruning drops them with the layout state.
+    // Names of other session-scoped stores, e.g. plugin storage, so pruning drops them with the layout state.
     const [scoped, setScoped, , scopedReady] = persisted(
       Persist.global("layout.scoped"),
       Persistence.array(Schema.String),

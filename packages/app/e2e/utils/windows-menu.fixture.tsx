@@ -18,7 +18,7 @@ export function mount(input: { server: string }) {
       throw new Error("Unexpected fixture action")
     }
 
-    // No main-process extensions run in this fixture.
+    // No main-process plugins run in this fixture.
     const bridge: Bridge = {
       packaged: false,
       call: unused,
@@ -45,7 +45,7 @@ export function mount(input: { server: string }) {
       openDirectoryPickerDialog: async () => null,
       notify: async () => undefined,
       restart: unused,
-      extensions: bridge,
+      plugins: bridge,
       runDesktopMenuAction: (action) => setStore("actions", (actions) => [...actions, action]),
     }
 

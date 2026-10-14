@@ -182,7 +182,7 @@ export function mountBrowserPane(input: PaneHost) {
       },
     }
 
-    // SAFETY: the host embeds call only `embed` and `capture` on their bridge (`runtime/extension/embeds.tsx`).
+    // SAFETY: the host embeds call only `embed` and `capture` on their bridge (`runtime/plugin/embeds.tsx`).
     const embeds = input.createEmbeds({ bridge: bridge as Bridge, zoom: () => 1, dialog: () => false })
 
     const t = (key: string, params?: Readonly<Partial<Record<string, string | number>>>) =>
@@ -373,8 +373,8 @@ export function mountBrowserPane(input: PaneHost) {
 
     // SAFETY: the real model and pane use only the host boundaries implemented above in this fixture's flows.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-    const extension = fake as unknown as Context & SetupContext<typeof definition>
-    const model = createModel(extension)
+    const plugin = fake as unknown as Context & SetupContext<typeof definition>
+    const model = createModel(plugin)
 
     const pick = () => {
       setStore("picker", store.session, false)
@@ -394,9 +394,9 @@ export function mountBrowserPane(input: PaneHost) {
     }
 
     return (
-      <PluginContext.Provider value={extension}>
+      <PluginContext.Provider value={plugin}>
         <PanelContext.Provider value={panel}>
-          {/* The extension contributes the bar's styles through the host's Style registry, which this fixture skips.
+          {/* The plugin contributes the bar's styles through the host's Style registry, which this fixture skips.
               Menus and suggestions portal into <body>, under this fixture's fixed host unless raised above it. */}
           <style>{`${barStyles}\n[data-popper-positioner] { z-index: 1001 !important; }`}</style>
           <h1 style={{ "font-size": "24px", "margin-bottom": "16px" }}>Browser pane lifecycle</h1>
@@ -562,21 +562,21 @@ type StripTabs = {
 
 type PaneClient = IpcClient<(typeof BrowserPane)["spec"]>
 
-/** The app's extension host and side region, passed in by `packages/app/component-tests/browser-pane-restore.spec.ts`. */
+/** The app's plugin host and side region, passed in by `packages/app/component-tests/browser-pane-restore.spec.ts`. */
 type RegionHost = {
   LanguageProvider: Component<{ locale: string; children: JSX.Element }>
-  ExtensionHostProvider: Component<
+  PluginHostProvider: Component<
     ParentProps<{
       definitions: Accessor<readonly Entry[]>
       disabled: Accessor<ReadonlySet<string> | undefined>
       /** The HostApis the fixture provides, by context property; the host provides links and dialogs itself. */
-      apis: { readonly [api: string]: (extension: string) => object | undefined }
+      apis: { readonly [api: string]: (plugin: string) => object | undefined }
       /** Runs once the app interface mounts; the fixture's is always mounted. */
       whenMounted: (run: () => void) => () => void
       ipc: (token: Ipc) => PaneClient | undefined
     }>
   >
-  useExtensionHost(): { ready(): boolean }
+  usePluginHost(): { ready(): boolean }
   createRegion(input: {
     region: "side"
     view: Accessor<MountedSession>
@@ -585,16 +585,16 @@ type RegionHost = {
   }): {
     keys(): readonly string[]
     active(): string | undefined
-    entry(key: string): { readonly tab: PanelTab; readonly extension: string; readonly provider: Panel } | undefined
+    entry(key: string): { readonly tab: PanelTab; readonly plugin: string; readonly provider: Panel } | undefined
   }
-  /** The real browser and file extensions. */
+  /** The real browser and file plugins. */
   definitions: readonly Entry[]
   /** Real shell command providers for shortcut cases. */
   Shell: ParentComponent
-  /** Shell fallback and the real extension command adapter. */
+  /** Shell fallback and the real plugin command adapter. */
   Commands: Component<{ close: () => void }>
-  /** The real host wrapper that renders an extension in its context. */
-  Contribution: Component<{ extension: string; children: () => JSX.Element }>
+  /** The real host wrapper that renders a plugin in its context. */
+  Contribution: Component<{ plugin: string; children: () => JSX.Element }>
 }
 
 type RegionFixtureState = {
@@ -602,7 +602,7 @@ type RegionFixtureState = {
   strips: Record<string, { all: string[]; active?: string }>
   /** Each registration of a pane binding, with how many tabs it asked main to restore. */
   registrations: { binding: string; session: string; restore: number }[]
-  /** The pane's Ipc is gone, as while its main extension reloads or is disabled. */
+  /** The pane's Ipc is gone, as while its main plugin reloads or is disabled. */
   away: boolean
   /** Whether the fixture's shell session was closed by its fallback shortcut. */
   closed: boolean
@@ -612,7 +612,7 @@ type RegionFixtureState = {
   closes: string[]
 }
 
-// Component-test fixture: the real side region over the real browser and file extensions, with the host's
+// Component-test fixture: the real side region over the real browser and file plugins, with the host's
 // session, layout, and storage HostApis and the pane's main-process Ipc faked at their boundaries. Alpha was
 // left on a file tab; Beta on a browser tab whose page the desktop reports only with its first inventory.
 export function mountBrowserRegion(input: RegionHost) {
@@ -639,7 +639,7 @@ export function mountBrowserRegion(input: RegionHost) {
       closes: [],
     })
 
-    // The file tree's state, Changes or All files, as the file extension stores it.
+    // The file tree's state, Changes or All files, as the file plugin stores it.
     const [tree, setTree] = createSignal<object>()
     const strip = (session: string) => store.strips[session] ?? { all: [] }
     const setAll = (session: string, all: string[]) => setStore("strips", session, "all", all)
@@ -668,7 +668,7 @@ export function mountBrowserRegion(input: RegionHost) {
     const location = { directory: "/repo" }
 
     const refs = [alpha, beta].map(
-      // SAFETY: the extensions read only these fields of a listed session, and of its server the ones `server` has.
+      // SAFETY: the plugins read only these fields of a listed session, and of its server the ones `server` has.
       // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
       (key) => ({ key, id: key.split("\n")[1], tab: key, server, pending: false, location }) as unknown as SessionRef,
     )
@@ -702,7 +702,7 @@ export function mountBrowserRegion(input: RegionHost) {
           background: [],
         }
 
-        // SAFETY: the browser and file extensions read only these fields of the routed session in this fixture's flows.
+        // SAFETY: the browser and file plugins read only these fields of the routed session in this fixture's flows.
         // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
         return [key, routed as unknown as MountedSession] as const
       }),
@@ -720,7 +720,7 @@ export function mountBrowserRegion(input: RegionHost) {
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const screen = { file, composer: { attach() {} } } as unknown as SessionScreen
 
-    const layout = (extension: string): Layout => ({
+    const layout = (plugin: string): Layout => ({
       narrow: () => false,
       ready: () => true,
       open(key, session, options) {
@@ -736,9 +736,7 @@ export function mountBrowserRegion(input: RegionHost) {
         return strip(session.key).all.includes(key) ? "open" : "closed"
       },
       stored: (session) =>
-        strip(session.key).all.flatMap((key) =>
-          key.startsWith(`${extension}:`) ? [key.slice(extension.length + 1)] : [],
-        ),
+        strip(session.key).all.flatMap((key) => (key.startsWith(`${plugin}:`) ? [key.slice(plugin.length + 1)] : [])),
       side: { opened: () => true, toggle() {} },
       sidebar: { opened: () => true },
       dock: { opened: () => false, placement: () => "side" },
@@ -772,9 +770,9 @@ export function mountBrowserRegion(input: RegionHost) {
     }
 
     // Loaded at once.
-    const storage = (extension: string): Storage => ({
-      store: (key, options) => keep(`${extension}:${key}`, options.initial).store,
-      memory: (key, options) => keep(`${extension}:${key}`, options.initial).memory,
+    const storage = (plugin: string): Storage => ({
+      store: (key, options) => keep(`${plugin}:${key}`, options.initial).store,
+      memory: (key, options) => keep(`${plugin}:${key}`, options.initial).memory,
       remove() {},
     })
 
@@ -862,7 +860,7 @@ export function mountBrowserRegion(input: RegionHost) {
       )
     }
 
-    // Mounts once every extension is active, as the session screen does.
+    // Mounts once every plugin is active, as the session screen does.
     function Strip() {
       const region = input.createRegion({
         region: "side",
@@ -886,7 +884,7 @@ export function mountBrowserRegion(input: RegionHost) {
       const browser = () => {
         const entry = region.entry(region.active() ?? "")
 
-        return entry?.extension === "browser" ? entry : undefined
+        return entry?.plugin === "browser" ? entry : undefined
       }
 
       return (
@@ -915,7 +913,7 @@ export function mountBrowserRegion(input: RegionHost) {
                   open: () => [tabID],
                 }}
               >
-                <input.Contribution extension={entry().extension}>
+                <input.Contribution plugin={entry().plugin}>
                   {() =>
                     entry().provider.render({
                       get tab() {
@@ -936,15 +934,15 @@ export function mountBrowserRegion(input: RegionHost) {
     }
 
     function Ready(props: ParentProps) {
-      const extensions = input.useExtensionHost()
+      const plugins = input.usePluginHost()
 
-      return <Show when={extensions.ready()}>{props.children}</Show>
+      return <Show when={plugins.ready()}>{props.children}</Show>
     }
 
     return (
       <DialogProvider>
         <input.Shell>
-          <input.ExtensionHostProvider
+          <input.PluginHostProvider
             definitions={() => input.definitions}
             disabled={() => new Set<string>()}
             apis={apis}
@@ -979,7 +977,7 @@ export function mountBrowserRegion(input: RegionHost) {
             <Ready>
               <Strip />
             </Ready>
-          </input.ExtensionHostProvider>
+          </input.PluginHostProvider>
         </input.Shell>
       </DialogProvider>
     )

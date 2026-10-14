@@ -9,8 +9,8 @@ import { UploadToastHost } from "@/composer/attachments/uploads"
 import { TitlebarRightProvider } from "@/shell/titlebar/right-slot"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
-import { ExtensionServerCover } from "@/runtime/extension/server-shell"
-import { ExtensionSlot } from "@/runtime/extension/render"
+import { PluginServerCover } from "@/runtime/plugin/server-shell"
+import { PluginSlot } from "@/runtime/plugin/render"
 
 export default function Layout(props: ParentProps) {
   const platform = usePlatform()
@@ -81,12 +81,12 @@ export default function Layout(props: ParentProps) {
                 : "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))",
             }}
           >
-            <ExtensionServerCover>
+            <PluginServerCover>
               <Suspense>{props.children}</Suspense>
-            </ExtensionServerCover>
+            </PluginServerCover>
           </main>
         </div>
-        <ExtensionSlot at="window.bottom" input={{}} />
+        <PluginSlot at="window.bottom" input={{}} />
         <ToastRegion />
         <UploadToastHost />
       </div>

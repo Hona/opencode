@@ -4,7 +4,7 @@ const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
 const modules = {
   fixture: source("../../gui-plugins/src/browser/panel.fixture.tsx"),
-  embeds: source("../src/runtime/extension/embeds.tsx"),
+  embeds: source("../src/runtime/plugin/embeds.tsx"),
   language: source("../src/runtime/i18n/language.tsx"),
 }
 

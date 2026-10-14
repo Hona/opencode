@@ -41,9 +41,9 @@ test("startup auth_token credentials override a persisted same-url server; witho
 test("treats WSL sidecars as remote server connections", () => {
   expect(
     ServerConnection.local({
-      type: "extension",
+      type: "plugin",
       key: "wsl:Debian",
-      extension: "wsl",
+      plugin: "wsl",
       state: "ready",
       connecting: false,
       authenticationRequired: false,
@@ -73,12 +73,13 @@ test("keeps exact persisted server identities and prevents removing provided ser
   expect(canRemoveServer({ key, stored, provided: [{ type: "http", http: { url: key } }] })).toBe(false)
 })
 
+/** The server props a project store follows, which the test changes. */
+type ProjectScopeProps = { server: ServerConnection.Key; canonicalLocalServer?: ServerConnection.Key }
+
 test("project actions update schema-derived state and follow dynamic server scopes", () => {
   const [store, setStore] = createStore(Schema.decodeUnknownSync(serverSchema())({}))
 
-  const props: { server: ServerConnection.Key; canonicalLocalServer?: ServerConnection.Key } = {
-    server: ServerConnection.Key.make("https://remote.example"),
-  }
+  const props: ProjectScopeProps = { server: ServerConnection.Key.make("https://remote.example") }
 
   const projects = createServerProjects({
     store,

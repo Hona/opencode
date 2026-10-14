@@ -74,7 +74,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const sessions = ctx.sessions
   const layout = ctx.layout
   const links = ctx.links
-  // The extension's own main entry provides the pane. `uses` declares it by reference; its full token, which this chunk
+  // The plugin's own main entry provides the pane. `uses` declares it by reference; its full token, which this chunk
   // loads with the protocol schemas, resolves it.
   const pane = ctx.uses.pane.load(BrowserPane)
 
@@ -140,7 +140,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (view) live.get(view.key)?.connection.wake()
   }
 
-  // The pane's Ipc goes away while its main extension reloads or is disabled, taking every binding with it.
+  // The pane's Ipc goes away while its main plugin reloads or is disabled, taking every binding with it.
   // Each attachment keeps its tabs and registers again once the Ipc is back. Created before the first attachment,
   // so its first run finds nothing to refresh or wake.
   createKeyed(
@@ -412,7 +412,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (current) openURL(session, workspaceFileURL(current, path))
   }
 
-  // The agent's browser.preview tool: the file extension opens HTML in the browser, other files in the file panel. Only the
+  // The agent's browser.preview tool: the file plugin opens HTML in the browser, other files in the file panel. Only the
   // session's screen resolves workspace paths, so a preview for a session that is not on screen waits for it.
   const preview = (entry: Live, path: string) => {
     const view = sessions.current()

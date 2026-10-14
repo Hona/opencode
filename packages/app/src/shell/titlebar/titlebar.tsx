@@ -32,8 +32,8 @@ import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsDialog } from "@/settings/command"
 import { rootSession } from "@/shell/routes/session"
 import { TitlebarItem } from "@opencode/plugin/gui"
-import { useExtensionHost } from "@/runtime/extension/host"
-import { TitlebarItems, useTitlebarItems } from "@/runtime/extension/titlebar-items"
+import { usePluginHost } from "@/runtime/plugin/host"
+import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
 import devIcon from "../../../../desktop/icons/dev/64x64.png"
 import betaIcon from "../../../../desktop/icons/beta/64x64.png"
 
@@ -781,14 +781,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 function ChannelIndicator(props: { horizontal?: boolean; sidebar?: boolean }) {
   const language = useLanguage()
   const platform = usePlatform()
-  const host = useExtensionHost()
+  const host = usePluginHost()
   const channel = import.meta.env.VITE_OPENCODE_CHANNEL
 
   if (!channel || channel === "prod") return null
 
   const label = () => language.t(`titlebar.channel.${channel}`)
 
-  // An extension may turn the dev badge into a toggle (the debug bar does).
+  // A plugin may turn the dev badge into a toggle (the debug bar does).
   const debug = () =>
     channel === "dev" || channel === "local"
       ? host.list(TitlebarItem).find((item) => item.placement === "channel")

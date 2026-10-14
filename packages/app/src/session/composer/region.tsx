@@ -31,7 +31,7 @@ import { createSessionComposerController, type SessionComposerController } from 
 import { SessionQueuePanel } from "./queue-panel"
 import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
-import type { Region } from "@/runtime/extension/panels"
+import type { Region } from "@/runtime/plugin/panels"
 import { SessionLocationMissing } from "./location-missing"
 
 export function createActiveSessionRegion(input: {

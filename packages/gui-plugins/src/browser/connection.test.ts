@@ -54,7 +54,7 @@ function fixture(strip: string[] = []) {
   }
 
   const target = { server: "browser-test", session: "ses_browser" }
-  // The Ipc is gone while the pane's main extension reloads or is disabled.
+  // The Ipc is gone while the pane's main plugin reloads or is disabled.
   // An endpoint main cannot resolve, e.g. an SSH server's while it reconnects, makes register reject.
   const ipc: IpcStub = { available: true }
   const owner: StripOwner = { located: true }

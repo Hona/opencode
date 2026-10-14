@@ -7,7 +7,7 @@ import { createSizing } from "./helpers"
 import type { SessionModel } from "./model"
 import { clampSessionPanelWidth, sessionPanelWidthMax } from "./session-panel-width"
 
-/** wide asks for the wider session minimum; sidebar is whether any extension fills the side panel sidebar. */
+/** wide asks for the wider session minimum; sidebar is whether any plugin fills the side panel sidebar. */
 export function createSessionScreenLayout(
   session: SessionModel,
   input: { wide: Accessor<boolean>; sidebar: Accessor<boolean> },

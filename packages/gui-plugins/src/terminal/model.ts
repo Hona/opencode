@@ -13,7 +13,7 @@ import { defaultTitle } from "./title"
 
 const STORE = "terminals"
 
-// The raw key terminals used before extensions, in the same workspace storage file.
+// The raw key terminals used before plugins, in the same workspace storage file.
 const LEGACY = "workspace:terminal"
 
 const HANDOFF_MAX = 40
@@ -122,7 +122,7 @@ export function createTerminalModel(input: { storage: Storage; sessions: Session
     },
     remove(value: { readonly server: string; readonly directory: string }) {
       cache.get(workspaceKey(value.server, value.directory))?.value.clear()
-      // Also drops terminals saved before extensions, which opening the store would otherwise import.
+      // Also drops terminals saved before plugins, which opening the store would otherwise import.
       input.storage.remove(STORE, { scope: { server: value.server, directory: value.directory }, from: LEGACY })
     },
     dispose() {

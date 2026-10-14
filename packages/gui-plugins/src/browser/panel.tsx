@@ -77,11 +77,11 @@ export default function SessionBrowserPane(props: {
   screen: SessionScreen
   model: Model
 }) {
-  const extension = usePlugin()
-  const keybinds = extension.keybinds
-  const desktop = extension.desktop
-  const embeds = extension.embeds
-  const system = extension.system
+  const plugin = usePlugin()
+  const keybinds = plugin.keybinds
+  const desktop = plugin.desktop
+  const embeds = plugin.embeds
+  const system = plugin.system
   const panel = usePanel()
   const visible = () => panel.visible()
   const state = () => props.model.tab(props.session, props.tab().id)
@@ -172,9 +172,9 @@ export default function SessionBrowserPane(props: {
   const error = () => {
     const value = props.model.error(props.session)
 
-    if (value === "browser.pane.replaced") return extension.t("replaced")
+    if (value === "browser.pane.replaced") return plugin.t("replaced")
 
-    if (value === "browser.pane.unsupported") return extension.t("unsupported")
+    if (value === "browser.pane.unsupported") return plugin.t("unsupported")
 
     return value
   }
@@ -283,7 +283,7 @@ export default function SessionBrowserPane(props: {
     // The owning screen's composer serves the session the pane shows.
     props.screen.composer.attach(
       commentNote({
-        origin: extension.id,
+        origin: plugin.id,
         tabID: current.tabID,
         url: current.url,
         element: {
@@ -319,7 +319,7 @@ export default function SessionBrowserPane(props: {
     if (!current) return
     props.screen.composer.attach(
       pageNote({
-        origin: extension.id,
+        origin: plugin.id,
         tabID: current.tabID,
         url: current.url,
         title: current.title,
@@ -343,8 +343,8 @@ export default function SessionBrowserPane(props: {
 
     if (!url) return
     void system.copy(url).then(
-      () => showToast({ title: extension.t("common.copied") }),
-      () => showToast({ title: extension.t("common.requestFailed") }),
+      () => showToast({ title: plugin.t("common.copied") }),
+      () => showToast({ title: plugin.t("common.requestFailed") }),
     )
   }
 
@@ -539,12 +539,12 @@ export default function SessionBrowserPane(props: {
         <div class="flex shrink-0 items-center">
           <For each={["back", "forward"] as const}>
             {(direction) => (
-              <Tooltip placement="top" value={extension.t(direction === "back" ? "common.goBack" : "common.goForward")}>
+              <Tooltip placement="top" value={plugin.t(direction === "back" ? "common.goBack" : "common.goForward")}>
                 <IconButton
                   variant="ghost-muted"
                   size="large"
                   disabled={!state()?.[direction === "back" ? "canGoBack" : "canGoForward"]}
-                  aria-label={extension.t(direction === "back" ? "common.goBack" : "common.goForward")}
+                  aria-label={plugin.t(direction === "back" ? "common.goBack" : "common.goForward")}
                   onClick={() => {
                     const tab = state()
 
@@ -559,15 +559,15 @@ export default function SessionBrowserPane(props: {
             placement="top"
             value={
               state()?.loading
-                ? extension.t("action.stop")
-                : tip(extension.t("action.reload"), keybinds.keybind("browser.reload"))
+                ? plugin.t("action.stop")
+                : tip(plugin.t("action.reload"), keybinds.keybind("browser.reload"))
             }
           >
             <IconButton
               variant="ghost-muted"
               size="large"
               disabled={!state()?.loading && !address()}
-              aria-label={extension.t(state()?.loading ? "action.stop" : "action.reload")}
+              aria-label={plugin.t(state()?.loading ? "action.stop" : "action.reload")}
               onClick={() => {
                 const tab = state()
 
@@ -656,8 +656,8 @@ export default function SessionBrowserPane(props: {
                 autocomplete="off"
                 value={field()}
                 disabled={!state()}
-                placeholder={extension.t("address.search")}
-                aria-label={extension.t("address.label")}
+                placeholder={plugin.t("address.search")}
+                aria-label={plugin.t("address.label")}
                 onFocus={(event) => {
                   setStore({ editing: true, address: field(), typed: false, active: -1, dismissed: false })
                   event.currentTarget.select()
@@ -724,37 +724,37 @@ export default function SessionBrowserPane(props: {
             </div>
             {/* Any zoom but 100% stays in sight, as the system browser shows it; a click resets it. */}
             <Show when={zoomed()}>
-              <Tooltip placement="top" value={extension.t("zoom.reset")}>
+              <Tooltip placement="top" value={plugin.t("zoom.reset")}>
                 <button
                   type="button"
                   data-slot="browser-address-zoom"
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => zoomPage("reset")}
                 >
-                  {extension.t("zoom.percent", { percent: Math.round((page()?.zoom ?? 1) * 100) })}
+                  {plugin.t("zoom.percent", { percent: Math.round((page()?.zoom ?? 1) * 100) })}
                 </button>
               </Tooltip>
             </Show>
             <Show when={address()}>
               <div data-slot="browser-address-actions">
-                <Tooltip placement="top" value={extension.t("page.add")}>
+                <Tooltip placement="top" value={plugin.t("page.add")}>
                   <IconButton
                     type="button"
                     variant="ghost-muted"
                     size="small"
-                    aria-label={extension.t("page.add")}
+                    aria-label={plugin.t("page.add")}
                     disabled={suspended() || failed()}
                     onPointerDown={(event) => event.preventDefault()}
                     onClick={openNote}
                     icon={<Icon name="outline-globe-plus" />}
                   />
                 </Tooltip>
-                <Tooltip placement="top" value={extension.t(reachable() ? "external.open" : "external.unavailable")}>
+                <Tooltip placement="top" value={plugin.t(reachable() ? "external.open" : "external.unavailable")}>
                   <IconButton
                     type="button"
                     variant="ghost-muted"
                     size="small"
-                    aria-label={extension.t("external.open")}
+                    aria-label={plugin.t("external.open")}
                     disabled={!reachable()}
                     onPointerDown={(event) => event.preventDefault()}
                     onClick={() => system.openExternal(address())}
@@ -770,7 +770,7 @@ export default function SessionBrowserPane(props: {
               onOpenAutoFocus={(event) => event.preventDefault()}
               onCloseAutoFocus={(event) => event.preventDefault()}
             >
-              <div id="browser-suggestions" role="listbox" aria-label={extension.t("address.suggestions")}>
+              <div id="browser-suggestions" role="listbox" aria-label={plugin.t("address.suggestions")}>
                 <For each={suggestions()}>
                   {(visit, index) => (
                     <PageRow
@@ -790,9 +790,9 @@ export default function SessionBrowserPane(props: {
             placement="top"
             value={
               <div class="flex flex-col gap-1">
-                {tip(extension.t("inspect"), keybinds.keybind("browser.inspect"))}
+                {tip(plugin.t("inspect"), keybinds.keybind("browser.inspect"))}
                 {/* The page claims Chromium's picker chord itself; the app leaves it to the terminal. */}
-                {tip(extension.t("inspect.pageShortcut"), keybinds.keys("mod+shift+c"))}
+                {tip(plugin.t("inspect.pageShortcut"), keybinds.keys("mod+shift+c"))}
               </div>
             }
           >
@@ -805,20 +805,20 @@ export default function SessionBrowserPane(props: {
               state={picking() ? "pressed" : undefined}
               classList={{ "!text-v2-icon-icon-accent": picking() || commenting() }}
               aria-pressed={picking()}
-              aria-label={extension.t("inspect")}
+              aria-label={plugin.t("inspect")}
               onClick={toggleInspect}
               icon={<Icon name="outline-browser-annotate" />}
             />
           </Tooltip>
           <Menu gutter={4} modal={false} placement="bottom-end">
-            <Tooltip placement="top" value={extension.t("options")}>
+            <Tooltip placement="top" value={plugin.t("options")}>
               <Menu.Trigger
                 as={IconButton}
                 variant="ghost-muted"
                 size="large"
                 disabled={!state()}
                 icon={<Icon name="outline-dots" />}
-                aria-label={extension.t("options")}
+                aria-label={plugin.t("options")}
               />
             </Tooltip>
             <Menu.Portal>
@@ -831,33 +831,33 @@ export default function SessionBrowserPane(props: {
                     onSelect={() => zoomPage("in")}
                     shortcut={<Keybind keys={[...keybinds.keys("mod+plus")]} variant="neutral" />}
                   >
-                    {extension.t("zoom.in")}
+                    {plugin.t("zoom.in")}
                   </Menu.Item>
                   <Menu.Item
                     disabled={!address()}
                     onSelect={() => zoomPage("out")}
                     shortcut={<Keybind keys={[...keybinds.keys("mod+-")]} variant="neutral" />}
                   >
-                    {extension.t("zoom.out")}
+                    {plugin.t("zoom.out")}
                   </Menu.Item>
                   <Menu.Item
                     disabled={!zoomed()}
                     onSelect={() => zoomPage("reset")}
-                    badge={extension.t("zoom.percent", { percent: Math.round((page()?.zoom ?? 1) * 100) })}
+                    badge={plugin.t("zoom.percent", { percent: Math.round((page()?.zoom ?? 1) * 100) })}
                   >
-                    {extension.t("zoom.reset")}
+                    {plugin.t("zoom.reset")}
                   </Menu.Item>
                 </Menu.Group>
                 <Menu.Separator />
                 <Menu.Item disabled={!address()} onSelect={copyLink}>
-                  {extension.t("link.copy")}
+                  {plugin.t("link.copy")}
                 </Menu.Item>
                 <Menu.Item disabled={!reachable()} onSelect={() => system.openExternal(address())}>
-                  {extension.t("external.open")}
+                  {plugin.t("external.open")}
                 </Menu.Item>
                 <Menu.Separator />
                 <Menu.Item disabled={props.model.visits().length === 0} onSelect={() => props.model.clearHistory()}>
-                  {extension.t("history.clear")}
+                  {plugin.t("history.clear")}
                 </Menu.Item>
               </Menu.Content>
             </Menu.Portal>
@@ -890,10 +890,10 @@ export default function SessionBrowserPane(props: {
                 <Icon name="outline-globe" size="large" class="text-v2-icon-icon-muted" />
                 <div class="flex flex-col gap-2">
                   <div class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                    {extension.t("home.title")}
+                    {plugin.t("home.title")}
                   </div>
                   <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                    {extension.t("home.description")}
+                    {plugin.t("home.description")}
                   </div>
                 </div>
               </div>
@@ -901,7 +901,7 @@ export default function SessionBrowserPane(props: {
               <Show when={recent().length > 0}>
                 <div class="flex w-full max-w-[685px] flex-col gap-4">
                   <div class="px-2 text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                    {extension.t("home.recent")}
+                    {plugin.t("home.recent")}
                   </div>
                   <div class="flex flex-col gap-2">
                     <For each={recent()}>{(visit) => <PageRow visit={visit} onClick={() => go(visit.url)} />}</For>
@@ -919,14 +919,14 @@ export default function SessionBrowserPane(props: {
           >
             <Icon name="globe" size="large" class="mb-2 shrink-0" />
             <div class="text-[13px] font-medium leading-[var(--line-height-compact)] text-text-strong">
-              {extension.t("failed.title")}
+              {plugin.t("failed.title")}
             </div>
-            <div class="text-13-regular leading-[var(--line-height-base)]">{extension.t("failed.description")}</div>
+            <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t("failed.description")}</div>
           </div>
         </Show>
         <Show when={suspended()}>
           <p class="px-6 text-center text-13-regular text-v2-text-text-subtle" role="status">
-            {extension.t("suspended")}
+            {plugin.t("suspended")}
           </p>
         </Show>
         <Show when={commenting() && store.comment}>
@@ -1016,7 +1016,7 @@ export default function SessionBrowserPane(props: {
                   onInput={(value) => setStore("note", "draft", value)}
                   onCancel={closeNote}
                   onSubmit={submitNote}
-                  placeholder={extension.t("page.placeholder")}
+                  placeholder={plugin.t("page.placeholder")}
                   mention={{
                     items: (query) => props.screen.file.search(query, { kind: "any" }),
                   }}
@@ -1035,7 +1035,7 @@ export default function SessionBrowserPane(props: {
         </Show>
       </embeds.View>
       <p class="sr-only" role="status" aria-live="polite">
-        {picking() ? extension.t("inspect.active") : ""}
+        {picking() ? plugin.t("inspect.active") : ""}
       </p>
     </aside>
   )
@@ -1123,7 +1123,7 @@ function SiteInformation(props: {
   site: () => Promise<{ cookies: number }> | undefined
   clear: () => Promise<void> | undefined
 }) {
-  const extension = usePlugin()
+  const plugin = usePlugin()
 
   // `load` counts openings and clears, so a count for an earlier one never replaces a later one.
   const [state, setState] = createStore<{ open: boolean; cookies?: number; clearing: boolean; load: number }>({
@@ -1159,7 +1159,7 @@ function SiteInformation(props: {
   const clear = () => {
     setState("clearing", true)
     void (props.clear() ?? Promise.reject(new Error("browser.pane.unavailable")))
-      .catch(() => showToast({ title: extension.t("common.requestFailed") }))
+      .catch(() => showToast({ title: plugin.t("common.requestFailed") }))
       .finally(() => {
         setState("clearing", false)
         load()
@@ -1178,13 +1178,13 @@ function SiteInformation(props: {
         if (open) load()
       }}
     >
-      <Tooltip placement="top" value={extension.t("site.info")}>
+      <Tooltip placement="top" value={plugin.t("site.info")}>
         <Popover.Trigger
           as={IconButton}
           type="button"
           variant="ghost-muted"
           size="small"
-          aria-label={extension.t("site.info")}
+          aria-label={plugin.t("site.info")}
           icon={<Icon name="outline-sliders" />}
         />
       </Tooltip>
@@ -1207,7 +1207,7 @@ function SiteInformation(props: {
             <IconButton
               variant="ghost-muted"
               size="small"
-              aria-label={extension.t("common.close")}
+              aria-label={plugin.t("common.close")}
               icon={<Icon name="outline-xmark" />}
               onClick={() => setState("open", false)}
             />
@@ -1216,16 +1216,16 @@ function SiteInformation(props: {
             {(value) => (
               <SiteRow
                 icon={value().icon}
-                title={extension.t(value().title)}
-                detail={value().description ? extension.t(value().description ?? "") : undefined}
+                title={plugin.t(value().title)}
+                detail={value().description ? plugin.t(value().description ?? "") : undefined}
               />
             )}
           </Show>
           <Show when={web()}>
             <SiteRow
               icon="outline-cookie"
-              title={extension.t("site.cookies")}
-              detail={state.cookies === undefined ? undefined : extension.plural("site.cookies.count", state.cookies)}
+              title={plugin.t("site.cookies")}
+              detail={state.cookies === undefined ? undefined : plugin.plural("site.cookies.count", state.cookies)}
             >
               <Button
                 size="small"
@@ -1233,22 +1233,18 @@ function SiteInformation(props: {
                 disabled={state.clearing || state.cookies === undefined}
                 onClick={clear}
               >
-                {extension.t("site.cookies.clear")}
+                {plugin.t("site.cookies.clear")}
               </Button>
             </SiteRow>
             <SiteRow
               icon="outline-eye-slash"
-              title={extension.t("site.permissions")}
-              detail={extension.t("site.permissions.description")}
+              title={plugin.t("site.permissions")}
+              detail={plugin.t("site.permissions.description")}
             />
           </Show>
-          <SiteRow
-            icon="select-element"
-            title={extension.t("site.agent")}
-            detail={extension.t("site.agent.description")}
-          />
+          <SiteRow icon="select-element" title={plugin.t("site.agent")} detail={plugin.t("site.agent.description")} />
           <Show when={props.server}>
-            {(server) => <SiteRow icon="server" title={extension.t("site.network", { server: server() })} />}
+            {(server) => <SiteRow icon="server" title={plugin.t("site.network", { server: server() })} />}
           </Show>
         </Popover.Content>
       </Popover.Portal>

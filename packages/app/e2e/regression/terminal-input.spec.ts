@@ -74,7 +74,7 @@ for (const mount of ["cached", "explicit"] as const) {
         mount === "cached"
           ? {
               panes: { ses_terminalinput: { terminal: true, terminalHeight: 320 } },
-              // The pre-extension terminal store, which the terminal extension imports.
+              // The pre-plugin terminal store, which the terminal plugin imports.
               storage: { [legacyTerminalKey()]: { active: cached.id, all: [{ ...cached, titleNumber: 1 }] } },
             }
           : undefined,

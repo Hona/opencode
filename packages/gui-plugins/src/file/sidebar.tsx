@@ -38,7 +38,7 @@ export default function FileSidebar(props: { session: MountedSession; screen: Se
     },
   )
 
-  // Without the review extension only the workspace files can show.
+  // Without the review plugin only the workspace files can show.
   const tab = createMemo(() => (changes() ? shared.tree.tab() : "all"))
   const count = createMemo(() => changes()?.diffs(props.session).length ?? 0)
   const ready = createMemo(() => changes()?.ready(props.session) ?? false)

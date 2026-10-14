@@ -66,7 +66,7 @@ const setup: Setup<typeof Details> = (ctx) => {
       const drawer = useDrawer()
       const [store, setStore] = createStore({ dismissed: false })
 
-      // Review is optional: the changes row offers it only while the review extension is active.
+      // Review is optional: the changes row offers it only while the review plugin is active.
       const review = createMemo(() => {
         const live = changes()
 
