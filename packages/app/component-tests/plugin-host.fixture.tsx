@@ -232,7 +232,7 @@ export function mountPlugins(input: {
 
   const storage = (plugin: string): Storage => ({
     store<S extends Schema.ConstraintCodec<object, unknown>>(key: string, options: StoreOptions<S>) {
-      const pair = persisted(Persist.global(`extension.${plugin}.${key}`), options.schema, options.initial, platform)
+      const pair = persisted(Persist.global(`plugin.${plugin}.${key}`), options.schema, options.initial, platform)
 
       return persistedHandle({ store: pair[0], set: pair[1], init: pair[3].promise })
     },

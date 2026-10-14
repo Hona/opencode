@@ -51,6 +51,8 @@ const open = (db: Database, settings: SettingsFiles) => {
 type Seed = {
   readonly settings?: readonly { readonly file: string; readonly key: string; readonly value: object }[]
   readonly state?: string
+  /** The store's row in the namespace builds before the plugin rename used. */
+  readonly renamed?: string
 }
 
 describe("main plugin storage", () => {
@@ -175,6 +177,16 @@ describe("main plugin storage", () => {
       row: '[{"id":"s"}]',
     },
     {
+      name: "the namespace from before the plugin rename, ahead of every declared home",
+      from: { settings: "ssh.servers" },
+      seed: {
+        renamed: '[{"id":"renamed"}]',
+        settings: [{ file: "opencode.settings", key: "ssh.servers", value: [{ id: "older" }] }],
+      },
+      id: "renamed",
+      row: '[{"id":"renamed"}]',
+    },
+    {
       name: "the newest home of a list that holds a value",
       from: [{ state: ["opencode.settings", "keepScreenActive"] }, { settings: "ssh.servers" }],
       seed: { settings: [{ file: "opencode.settings", key: "ssh.servers", value: [{ id: "older" }] }] },
@@ -211,10 +223,12 @@ describe("main plugin storage", () => {
 
     if (input.seed.state) state.set("opencode.settings", "keepScreenActive", input.seed.state)
 
+    if (input.seed.renamed) state.set("extension.example", "servers", input.seed.renamed)
+
     const storage = createStorage(state, settings, "example")
     const schema = Schema.Array(Schema.Struct({ id: Schema.String }))
     const store = storage.store("servers", { schema, initial: [], from: input.from })
-    const imported = { value: store.value.map((item) => item.id), row: state.get("extension.example", "servers") }
+    const imported = { value: store.value.map((item) => item.id), row: state.get("plugin.example", "servers") }
 
     storage.remove("servers", { from: input.from })
 
@@ -227,6 +241,7 @@ describe("main plugin storage", () => {
 function homes(state: StateStore, settings: SettingsFiles) {
   return [
     state.get("opencode.settings", "keepScreenActive"),
+    state.get("extension.example", "servers"),
     settings().get("ssh.servers"),
     settings("opencode.updater").get("ready"),
   ].filter((value) => value !== null && value !== undefined)

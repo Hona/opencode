@@ -11,7 +11,7 @@ const tables = (db: ReturnType<typeof drizzle>) =>
     .all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name`)
     .map((row) => row.name)
 
-const expected = ["blob", "document", "extension", "migration", "state"]
+const expected = ["blob", "document", "migration", "plugin", "state"]
 
 describe("database", () => {
   test("bootstraps every table on a fresh database and is idempotent", () => {
@@ -48,10 +48,15 @@ describe("database", () => {
 
     expect(migrate(db)).toEqual(migrations.slice(archived).map((migration) => migration.id))
     expect(tables(db)).toEqual(expected)
-    expect(db.all(sql`SELECT id, enabled, manifest, revision FROM extension ORDER BY id`)).toEqual([
+
+    const saved = [
       { id: "acme", enabled: 1, manifest: "{}", revision: "r1" },
       { id: "browser", enabled: 0, manifest: null, revision: null },
-    ])
+    ]
+
+    expect(db.all(sql`SELECT id, enabled, manifest, revision FROM plugin ORDER BY id`)).toEqual(saved)
+    // 2.0.24 to 2.0.28 read the table by its old name; a downgraded app still finds the same rows there.
+    expect(db.all(sql`SELECT id, enabled, manifest, revision FROM extension ORDER BY id`)).toEqual(saved)
     native.close()
   })
 

@@ -88,7 +88,7 @@ test("summary disclosures import legacy settings and persist in plugin storage",
   await expect(trigger).toBeFocused()
   await expect
     .poll(() =>
-      page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:extension.details.prefs") ?? "null")),
+      page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:plugin.details.prefs") ?? "null")),
     )
     .toEqual({ projectExpanded: true, serverExpanded: false })
 

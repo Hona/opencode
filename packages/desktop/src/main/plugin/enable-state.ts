@@ -4,7 +4,7 @@ import type { EnableState } from "@opencode/plugin/gui/host"
 /** Explicit settings only: both startup readers and the manager resolve absent rows through the same SDK rule. */
 export function readEnableState(db: DatabaseSync): readonly EnableState[] {
   return db
-    .prepare("SELECT id, enabled FROM extension")
+    .prepare("SELECT id, enabled FROM plugin")
     .all()
     .map((row) => {
       // SAFETY: plugin.id is TEXT PRIMARY KEY; plugin.enabled is INTEGER NOT NULL in every journaled schema.

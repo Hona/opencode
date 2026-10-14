@@ -29,4 +29,11 @@ export const migrations = [
     id: "20261013231314_drop-extension-files",
     statements: ["DROP TABLE `extension_file`;"],
   },
+  {
+    id: "20261014210000_rename-extension-to-plugin",
+    statements: [
+      "ALTER TABLE `extension` RENAME TO `plugin`;",
+      "CREATE VIEW `extension` AS SELECT `id`, `enabled`, `manifest`, `revision` FROM `plugin`;",
+    ],
+  },
 ]

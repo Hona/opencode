@@ -930,7 +930,7 @@ story("declared global stores load before setup, so setup reads the stored value
     const seen: unknown[] = []
 
     const host = mountPlugins({
-      stored: { "extension.fixture.prefs": { open: true } },
+      stored: { "plugin.fixture.prefs": { open: true } },
       definitions: [
         {
           id: "fixture",

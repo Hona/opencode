@@ -49,7 +49,15 @@ import { createEmbeds } from "./embeds"
 import { usePluginHost, type HostApiFactories } from "./host"
 import { createLocatedWrites } from "./located"
 import type { Region } from "./panels"
-import { deferredHandle, globalStoreTarget, persistedHandle, storeImports, storeName } from "./stores"
+import {
+  deferredHandle,
+  globalStoreTarget,
+  persistedHandle,
+  renamedFrom,
+  renamedStoreName,
+  storeImports,
+  storeName,
+} from "./stores"
 
 type Attached = {
   sessions: Accessor<readonly SessionRef[]>
@@ -129,27 +137,32 @@ export function createHostApis() {
     connected: Attached,
   ) => {
     const name = storeName(plugin, key)
+    const renamed = renamedStoreName(plugin, key)
 
     if ("session" in scope) {
       const location = scope.session.location
 
       if (!location) throw new Error("Session storage requires a session location")
+      // Pruning a session drops its value under both names.
       connected.scoped(name)
+      connected.scoped(renamed)
       const server = connected.scope(scope.session.server.id)
       const directory = base64Encode(location.directory)
       const session = SessionStateKey.from(server, SessionRouteKey.fromRoute(directory, scope.session.id))
+      const at = (store: string) => Persist.serverSession(server, directory, scope.session.id, store)
 
-      return {
-        ...Persist.serverSession(server, directory, scope.session.id, name),
-        copyFrom: storeImports(from, session),
-      }
+      return { ...at(name), copyFrom: [renamedFrom(at(renamed)), ...storeImports(from, session)] }
     }
 
-    const copyFrom = storeImports(from)
+    const server = connected.scope(scope.server)
+    const directory = scope.directory
 
-    if (!scope.directory) return { ...Persist.serverGlobal(connected.scope(scope.server), name), copyFrom }
+    const at = (store: string) =>
+      directory === undefined
+        ? Persist.serverGlobal(server, store)
+        : Persist.serverWorkspace(server, base64Encode(directory), store)
 
-    return { ...Persist.serverWorkspace(connected.scope(scope.server), base64Encode(scope.directory), name), copyFrom }
+    return { ...at(name), copyFrom: [renamedFrom(at(renamed)), ...storeImports(from)] }
   }
 
   const apis: HostApiFactories = {

@@ -1108,7 +1108,7 @@ test("desktop review waits for the session's stored mode before it loads changes
     .poll(() =>
       page.evaluate(() =>
         Object.entries(localStorage).some(
-          ([key, value]) => key.includes("extension.review.session") && value.includes('"branch"'),
+          ([key, value]) => key.includes("plugin.review.session") && value.includes('"branch"'),
         ),
       ),
     )
@@ -1116,7 +1116,7 @@ test("desktop review waits for the session's stored mode before it loads changes
 
   // The reopened window's review mounts before its session store has loaded.
   working.length = 0
-  await page.goto(desktop("extension.review.session"))
+  await page.goto(desktop("plugin.review.session"))
   await expectSessionTitle(page, title)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(page.locator("#review-panel").getByText("Loading changes…", { exact: true })).toBeVisible()

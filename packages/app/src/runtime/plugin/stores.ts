@@ -22,12 +22,28 @@ const loads = new WeakMap<object, Promise<void>>()
 
 /** The storage key of a plugin's store: the plugin id is its namespace. */
 export function storeName(plugin: string, key: string) {
+  return `plugin.${plugin}.${key}`
+}
+
+/** The key the same store had before plugins were renamed from extensions. */
+export function renamedStoreName(plugin: string, key: string) {
   return `extension.${plugin}.${key}`
+}
+
+/**
+ * Imports a store's value once from where it lived before the rename: the same place under `renamedStoreName`. It
+ * copies instead of moving, so an older build opened on the same storage still finds the value.
+ */
+export function renamedFrom(target: { readonly storage?: string; readonly key: string }): CopyFrom {
+  return { key: target.key, storage: target.storage, pick: (value) => value }
 }
 
 /** Where `Storage.store` keeps a plugin's app-wide store, with the older keys it imports. */
 export function globalStoreTarget(plugin: string, key: string, from: StoreFrom | readonly StoreFrom[] | undefined) {
-  return { ...Persist.global(storeName(plugin, key)), copyFrom: storeImports(from) }
+  return {
+    ...Persist.global(storeName(plugin, key)),
+    copyFrom: [renamedFrom(Persist.global(renamedStoreName(plugin, key))), ...storeImports(from)],
+  }
 }
 
 /**
