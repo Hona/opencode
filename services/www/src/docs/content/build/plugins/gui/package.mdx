@@ -3,8 +3,8 @@ title: "Package and build"
 description: "Ship a GUI plugin from the same npm package as your server and TUI plugin with one ./gui export."
 ---
 
-A plugin package can ship server, TUI, and GUI code from one npm package. Add one `./gui` export beside `./tui`, and the
-desktop app loads it for everyone who configures the plugin.
+A plugin package can ship server, TUI, and GUI code from one npm package. Add one `./gui` export beside `./tui`, and
+OpenCode Desktop loads it for each plugin on its own background server.
 
 ```json title="package.json"
 {
@@ -40,7 +40,7 @@ OpenCode resolves each entry point from `exports`, or from conventional file nam
 
 | Export | Conventional file | Runs in | SDK |
 | --- | --- | --- | --- |
-| `.` or `./server` | `server.ts` or `index.ts` | The OpenCode server | `@opencode/plugin` |
+| `.` or `./server` | `server.ts`, else `index.ts` | The OpenCode server | `@opencode/plugin` |
 | `./tui` | `tui.tsx` | The terminal interface | `@opencode/plugin/tui` |
 | `./rpc` | `rpc.ts` | Typed RPC contract for the server and clients | `@opencode/plugin/rpc` |
 | `./gui` | `gui.cjs` or `gui.js` | Every desktop app window, and the desktop app's Electron main process | `@opencode/plugin/gui` |
@@ -89,14 +89,8 @@ export default Plugin.define({
 })
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `id` | Must equal the server plugin's `id`. |
-| `os`, `provides`, `uses`, `requires`, `stores` | Platforms, tokens, and stored state. See [Define the GUI plugin](/build/plugins/gui#define-the-gui-plugin). |
-| `i18n` | Every locale inline, for example `{ en: { … }, fr: { … } }`. A plugin cannot load locales on demand. |
-| `setup` | Runs in every desktop app window. See the [Window SDK](/build/plugins/gui/window). |
-| `main` | Runs once in the desktop app's main process. See [Main process & IPC](/build/plugins/gui/main). |
-
+- Every field is listed in [Define the GUI plugin](/build/plugins/gui#define-the-gui-plugin). `id` must equal the
+  server plugin's `id`, and `i18n` holds every locale inline.
 - Define `setup`, `main`, or both. A GUI without either fails to load.
 - `ctx.client?.rpc(AcmeRpc)` calls the plugin's server half. See [RPC](/build/plugins/rpc).
 
@@ -145,7 +139,7 @@ import { Notes } from "./contract"
 export const definition = Plugin.define({ id: "acme", provides: { notes: Notes } })
 ```
 
-```tsx title="src/gui/renderer.tsx"
+```tsx title="src/gui/window.tsx"
 import type { Plugin } from "@opencode/plugin/gui"
 import { Notes } from "./contract"
 import type { definition } from "./definition"
@@ -168,7 +162,7 @@ export const main: Plugin.MainSetup<typeof definition> = (ctx) => {
 import { Plugin } from "@opencode/plugin/gui"
 import { definition } from "./gui/definition"
 import { main } from "./gui/main"
-import { setup } from "./gui/renderer"
+import { setup } from "./gui/window"
 
 export default Plugin.define({ ...definition, setup, main })
 ```
@@ -181,7 +175,7 @@ export default Plugin.define({ ...definition, setup, main })
 
 ## Build the bundle
 
-`./gui` must be one prebuilt **CommonJS** file. Build it with the Vite preset from `@opencode/plugin/gui/vite`:
+`./gui` must be one prebuilt CommonJS file. Build it with the Vite preset from `@opencode/plugin/gui/vite`:
 
 ```ts title="vite.config.ts"
 import { defineConfig } from "vite"
@@ -228,13 +222,13 @@ Add the build tools as devDependencies. The app provides `@opencode/plugin/gui` 
 types from the `@opencode/plugin` dependency.
 
 ```bash
-npm install --save-dev vite vite-plugin-solid solid-js
+bun add -d vite vite-plugin-solid solid-js
 ```
 
 For the Electron and Node types in `main`, also add `electron` and `@types/node`:
 
 ```bash
-npm install --save-dev electron @types/node
+bun add -d electron @types/node
 ```
 
 ### Shared modules
@@ -257,8 +251,8 @@ so they never add a new source of code.
   HTTP servers. Those plugins run their server entries there, but load no GUI into your app.
 - **Global config:** configure the plugin in the global `opencode.json(c)` to make its GUI available in every window.
 
-The desktop app's main process reads the bundle from its own server with a credential that only it holds. A window
-cannot supply main-process code.
+The desktop app's main process lists the plugins and reads their bundles from its own server, with a credential that
+only it holds, and sends windows the same set. A window cannot supply main-process code.
 
 ## Reload and updates
 
@@ -278,5 +272,5 @@ vite build --watch
 
 <Callout type="note">
 Built-in plugins keep their ids. If your server plugin's id is a built-in plugin's id, nests under one with a `.`, or is in
-the `opencode` namespace, your plugin does not load its GUI.
+the `opencode` namespace, your plugin does not load its GUI, and **Settings > Plugins** lists it as not loaded.
 </Callout>
