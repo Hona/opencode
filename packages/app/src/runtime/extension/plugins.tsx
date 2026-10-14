@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
-import type { Definition, PluginOptions } from "@opencode/gui-extensions/sdk"
-import { pluginIdAvailable, type Bridge } from "@opencode/gui-extensions/sdk/bridge"
-import type { OpenCodeClient, PluginApi, PluginInfo } from "@opencode/client/promise"
+import type { Definition, PluginOptions } from "@opencode/plugin/gui"
+import { pluginIdAvailable, shipsPluginGui, type Bridge } from "@opencode/plugin/gui/host"
+import type { OpenCodeClient, PluginApi } from "@opencode/client/promise"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -25,13 +25,17 @@ export type PluginGui = {
 
 /**
  * Loads the GUIs of the plugins on the desktop app's own server. That server already runs the plugins' server entries,
- * so their `./gui` bundles add no new source of code; other servers' plugins load no GUI. Main reads each bundle from
- * that server itself to run its `main` export; this only tells it which plugins exist.
+ * so their `./gui` bundles add no new source of code; other servers' plugins load no GUI. Main lists and reads the
+ * plugins from that server itself to run their `main` setups; this only tells it when they may have changed.
  *
  * Mounted below the app's server providers, which the extension root sits above, so it hands the definitions up
  * through `onChange` rather than the root reading them.
  */
-export function PluginGuiLoader(props: { bridge: Bridge; onChange: (plugins: readonly PluginGui[]) => void }) {
+export function PluginGuiLoader(props: {
+  bridge: Bridge
+  /** The GUIs that load, and the ids of plugins whose GUI cannot load because a built-in claims the id. */
+  onChange: (plugins: readonly PluginGui[], reserved: readonly string[]) => void
+}) {
   const global = useGlobal()
   const platform = usePlatform()
   const os = platform.platform === "desktop" ? platform.os : undefined
@@ -62,20 +66,20 @@ export function PluginGuiLoader(props: { bridge: Bridge; onChange: (plugins: rea
 
       return { api: current.sdk.api.plugin, version: version() }
     },
-    async (input, info): Promise<readonly Loaded[]> => {
+    async (input, info): Promise<{ readonly plugins: readonly Loaded[]; readonly reserved: readonly string[] }> => {
       // A failed listing keeps the plugins this window already runs; the next update or reconnect lists them again.
       const listed = await input.api.list().then(
         (result) => result.data,
         () => undefined,
       )
 
-      if (!listed) return info.value ?? []
+      if (!listed) return info.value ?? { plugins: [], reserved: [] }
+
+      const shipped = listed.filter(shipsPluginGui)
+      const reserved = shipped.flatMap((plugin) => (pluginIdAvailable(plugin.id, builtins) ? [] : [plugin.id]))
 
       const plugins = await Promise.all(
-        listed
-          .filter(shipsGui)
-          .filter((plugin) => pluginIdAvailable(plugin.id, builtins))
-          .map((plugin) => load(input.api, plugin.id, cache)),
+        shipped.filter((plugin) => !reserved.includes(plugin.id)).map((plugin) => load(input.api, plugin.id, cache)),
       )
 
       const ids = new Set(plugins.map((plugin) => plugin.id))
@@ -83,29 +87,30 @@ export function PluginGuiLoader(props: { bridge: Bridge; onChange: (plugins: rea
         if (!ids.has(id)) cache.delete(id)
       })
 
-      return plugins.filter((plugin) => !plugin.definition.os || (!!os && plugin.definition.os.includes(os)))
+      return {
+        plugins: plugins.filter((plugin) => !plugin.definition.os || (!!os && plugin.definition.os.includes(os))),
+        reserved,
+      }
     },
   )
 
   // Syncs the found plugins out to the extension host and to main.
   createEffect(() => {
-    const plugins = found.latest
+    const latest = found.latest
 
-    if (!plugins) return
+    if (!latest) return
+    const plugins = latest.plugins
     // The server that runs the plugin, read each time: it is a new client after that server restarts.
     const client = () => controller()?.sdk.api
-    props.onChange(plugins.map((plugin) => ({ definition: plugin.definition, options: plugin.options, client })))
-    props.bridge.plugins(
-      plugins.flatMap((plugin) => (plugin.revision ? [{ id: plugin.id, revision: plugin.revision }] : [])),
+    props.onChange(
+      plugins.map((plugin) => ({ definition: plugin.definition, options: plugin.options, client })),
+      latest.reserved,
     )
+    // Main lists the plugins from that server itself; the window only says when to look.
+    props.bridge.pluginsChanged()
   })
 
   return null
-}
-
-/** An active, non-built-in server plugin with an id that exports `./gui`. */
-function shipsGui(plugin: PluginInfo): plugin is PluginInfo & { readonly id: string } {
-  return !!plugin.id && plugin.source.type !== "builtin" && plugin.state.status === "active" && !!plugin.features.gui
 }
 
 /**

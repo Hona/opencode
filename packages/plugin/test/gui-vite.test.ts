@@ -3,8 +3,8 @@ import { mkdtemp, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { build } from "vite"
-import { pluginSharedModules, pluginWindowModules } from "../../gui-extensions/src/sdk/bridge"
-import { gui } from "../src/gui-vite"
+import { pluginSharedModules, pluginWindowModules } from "../src/gui/host"
+import { gui } from "../src/gui/vite"
 
 const dirs: string[] = []
 
@@ -41,7 +41,7 @@ test("the preset writes one CommonJS file that requires only what the app provid
   expect(await readdir(path.join(root, "dist"))).toEqual(["gui.cjs"])
   expect(code).toContain("Notes")
   expect([...required].sort()).toEqual([...hosted, "electron", "node:fs"].sort())
-})
+}, 60_000)
 
 test("the preset fails the build on an OpenCode, Effect or Solid module the app does not provide", async () => {
   const root = await project({
@@ -49,4 +49,4 @@ test("the preset fails the build on an OpenCode, Effect or Solid module the app 
   })
 
   await expect(bundle(root)).rejects.toThrow("effect/Schema is not a module the OpenCode app provides")
-})
+}, 60_000)

@@ -25,7 +25,7 @@ import { resolveTemplate } from "@solid-primitives/i18n"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { pluralCategory } from "@opencode/ui/context/i18n"
 import {
-  ExtensionContext,
+  PluginContext,
   LifetimeContext,
   LinkHandler,
   Live,
@@ -49,7 +49,7 @@ import {
   type SessionRef,
   type SetupContext,
   type Token,
-} from "@opencode/gui-extensions/sdk"
+} from "@opencode/plugin/gui"
 import type { OpenCodeClient } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import { createSessionStore, whenLoaded } from "./stores"
@@ -383,9 +383,7 @@ function createHost(input: HostInput) {
                       return null
                     }}
                   >
-                    <ExtensionContext.Provider value={context}>
-                      {untrack(() => render(handle))}
-                    </ExtensionContext.Provider>
+                    <PluginContext.Provider value={context}>{untrack(() => render(handle))}</PluginContext.Provider>
                   </ErrorBoundary>
                 )
               },
@@ -453,7 +451,7 @@ function createHost(input: HostInput) {
         instances.set(definition.id, instance)
 
         // Setup and every scope under it read the extension's context, e.g. `createKeyed` with a token.
-        if (root) root.context = { ...root.context, [ExtensionContext.id]: instance.context }
+        if (root) root.context = { ...root.context, [PluginContext.id]: instance.context }
 
         const crash = (cause: unknown) => {
           if (instances.get(definition.id) !== instance) return
@@ -628,7 +626,7 @@ function createHost(input: HostInput) {
       })
     }
 
-    // `ctx.uses` holds the extension's own tokens too; `Extension.define` refuses a key that names two tokens.
+    // `ctx.uses` holds the extension's own tokens too; `Plugin.define` refuses a key that names two tokens.
     const usable = { ...definition.provides, ...definition.uses }
 
     Object.values(usable).forEach(learn)

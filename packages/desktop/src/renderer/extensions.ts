@@ -1,5 +1,5 @@
 import { Predicate } from "effect"
-import type { Bridge, BridgeMessage } from "@opencode/gui-extensions/sdk/bridge"
+import type { Bridge, BridgeMessage } from "@opencode/plugin/gui/host"
 import type { ExtensionFailure } from "../shared/ipc-rpc/extensions"
 import { api } from "./api"
 import { cancellable, invoke, listen, send } from "./ipc-client"
@@ -62,7 +62,7 @@ export function createExtensionBridge(): Bridge {
     capture: (id) => invoke("ExtensionCapture", { id }).then((data) => data ?? undefined),
     runMenubarItem: (id) => send("ExtensionMenubarItem", { id }),
     configure: (servers) => send("ExtensionConfigure", { servers }),
-    plugins: (plugins) => send("ExtensionPlugins", { plugins }),
+    pluginsChanged: () => send("ExtensionPluginsChanged"),
     manager: {
       initial: window.electron.extensions,
       list: () => invoke("ExtensionList"),

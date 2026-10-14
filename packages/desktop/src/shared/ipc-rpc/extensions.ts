@@ -64,13 +64,6 @@ export const ExtensionInstalled = Schema.Struct({
   error: Schema.optionalKey(Schema.String),
 })
 
-export const ExtensionPlugin = Schema.Struct({
-  id: text(256),
-  revision: text(256),
-})
-
-export type ExtensionPlugin = typeof ExtensionPlugin.Type
-
 export type ExtensionInstalled = typeof ExtensionInstalled.Type
 
 export const ExtensionMenubarItem = Schema.Struct({
@@ -98,7 +91,8 @@ export const ExtensionRpcs = RpcGroup.make(
   Rpc.make("ExtensionMenubarItem", { payload: { id } }),
   Rpc.make("ExtensionMenubarItems", { success: Schema.Array(ExtensionMenubarItem) }),
   Rpc.make("ExtensionConfigure", { payload: { servers: Schema.Array(ExtensionEndpoint) } }),
-  Rpc.make("ExtensionPlugins", { payload: { plugins: Schema.Array(ExtensionPlugin) } }),
+  // Plugins on the app's own server changed; main lists them from that server itself.
+  Rpc.make("ExtensionPluginsChanged"),
   Rpc.make("ExtensionList", { success: Schema.Array(ExtensionInstalled) }),
   Rpc.make("ExtensionEnable", { payload: { id }, error: ExtensionFailure }),
   Rpc.make("ExtensionDisable", { payload: { id }, error: ExtensionFailure }),

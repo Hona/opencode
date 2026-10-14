@@ -1,21 +1,16 @@
-import type { Definition } from "@opencode/gui-extensions/sdk"
-import {
-  evaluatePluginBundle,
-  inertModule,
-  mainOnlyModule,
-  type PluginModule,
-} from "@opencode/gui-extensions/sdk/bridge"
+import type { Definition } from "@opencode/plugin/gui"
+import { evaluatePluginBundle, inertModule, mainOnlyModule, type PluginModule } from "@opencode/plugin/gui/host"
 
 // Plugin bundles share the host's module instances, so tokens, contexts and schemas they import are the same objects
 // the host checks against. In a window, the main SDK's name resolves to the window SDK.
 const modules = {
   effect: () => import("effect"),
-  "@opencode/plugin/gui": () => import("@opencode/gui-extensions/sdk"),
-  "@opencode/plugin/gui/main": () => import("@opencode/gui-extensions/sdk"),
-  "@opencode/plugin/gui/file": () => import("@opencode/gui-extensions/file"),
-  "@opencode/plugin/gui/review": () => import("@opencode/gui-extensions/review"),
-  "@opencode/plugin/gui/browser": () => import("@opencode/gui-extensions/browser"),
-  "@opencode/plugin/gui/updater": () => import("@opencode/gui-extensions/updater"),
+  "@opencode/plugin/gui": () => import("@opencode/plugin/gui"),
+  "@opencode/plugin/gui/main": () => import("@opencode/plugin/gui"),
+  "@opencode/plugin/gui/file": () => import("@opencode/plugin/gui/file"),
+  "@opencode/plugin/gui/review": () => import("@opencode/plugin/gui/review"),
+  "@opencode/plugin/gui/browser": () => import("@opencode/plugin/gui/browser"),
+  "@opencode/plugin/gui/updater": () => import("@opencode/plugin/gui/updater"),
   "@opencode/schema/rpc": () => import("@opencode/schema/rpc"),
   "@opencode/client": () => import("@opencode/client"),
   "@opencode/client/effect": () => import("@opencode/client/effect"),

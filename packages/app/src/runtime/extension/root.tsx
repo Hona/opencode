@@ -1,6 +1,6 @@
-import { createMemo, createSignal, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
-import { extensionEnabled, type Bridge } from "@opencode/gui-extensions/sdk/bridge"
-import type { Definition } from "@opencode/gui-extensions/sdk"
+import { batch, createMemo, createSignal, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
+import { extensionEnabled, type Bridge } from "@opencode/plugin/gui/host"
+import type { Definition } from "@opencode/plugin/gui"
 import { builtins } from "./builtins"
 import { createInstalled } from "./installed"
 import { PluginGuiLoader, type PluginGui } from "./plugins"
@@ -17,10 +17,21 @@ import { createContext, useContext } from "solid-js"
 
 const HostApisContext = createContext<HostApis>()
 
-// Desktop only: a window loads plugin GUIs from the app's own server and reports them to main over the bridge.
-const PluginsContext = createContext<{ bridge: Bridge; set: (plugins: readonly PluginGui[]) => void }>()
+// Desktop only: a window loads plugin GUIs from the app's own server and tells main when they change.
+const PluginsContext = createContext<{
+  bridge: Bridge
+  set: (plugins: readonly PluginGui[], reserved: readonly string[]) => void
+  reserved: () => readonly string[]
+}>()
 
 const ExtensionHotReload = import.meta.env.DEV ? lazy(() => import("./hmr")) : undefined
+
+/** The ids of plugins on the app's own server whose GUI cannot load because a built-in plugin claims the id. */
+export function useReservedPlugins() {
+  const plugins = useContext(PluginsContext)
+
+  return () => plugins?.reserved() ?? []
+}
 
 export function useHostApis() {
   const value = useContext(HostApisContext)
@@ -48,6 +59,8 @@ export function ExtensionRoot(props: ParentProps) {
 
   // The GUIs of the plugins on the app's own server, found once the app interface lists its servers.
   const [plugins, setPlugins] = createSignal<readonly PluginGui[]>([])
+  // Plugins whose GUI cannot load because a built-in claims the id; Settings > Plugins reports them.
+  const [reserved, setReserved] = createSignal<readonly string[]>([])
 
   // The same definitions in the same order are no change, so a refetch that found nothing new restarts nothing.
   const definitions = createMemo<readonly Definition[]>(
@@ -71,7 +84,19 @@ export function ExtensionRoot(props: ParentProps) {
 
   return (
     <HostApisContext.Provider value={apis}>
-      <PluginsContext.Provider value={bridge && { bridge, set: setPlugins }}>
+      <PluginsContext.Provider
+        value={
+          bridge && {
+            bridge,
+            set: (next, ids) =>
+              batch(() => {
+                setPlugins(next)
+                setReserved(ids)
+              }),
+            reserved,
+          }
+        }
+      >
         <ExtensionHostProvider
           definitions={definitions}
           disabled={disabled}

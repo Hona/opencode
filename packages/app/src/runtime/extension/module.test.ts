@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Command, type Registry } from "@opencode/gui-extensions/sdk"
+import { Command, type Registry } from "@opencode/plugin/gui"
 import { pluginDefinition } from "./module"
 
 // One `./gui` bundle for both processes, as a bundler emits it: requires hoisted to module scope, including Electron

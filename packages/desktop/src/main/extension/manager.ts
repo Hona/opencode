@@ -1,5 +1,5 @@
-import type { Definition } from "@opencode/gui-extensions/sdk/main"
-import { extensionEnabled } from "@opencode/gui-extensions/sdk/bridge"
+import type { Definition } from "@opencode/plugin/gui/main"
+import { extensionEnabled } from "@opencode/plugin/gui/host"
 import type { Database } from "../storage/database"
 import { extension } from "../storage/schema"
 import { readEnableState } from "./enable-state"

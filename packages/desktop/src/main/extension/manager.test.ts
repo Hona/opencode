@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
-import { extensionEnabled } from "@opencode/gui-extensions/sdk/bridge"
-import details from "../../../../gui-extensions/src/details/index"
-import context from "../../../../gui-extensions/src/context/index"
+import { extensionEnabled } from "@opencode/plugin/gui/host"
+import { builtins } from "@opencode/gui-plugins/main"
 import { openDatabase } from "../storage/database"
 import { extension } from "../storage/schema"
 import { readEnableState } from "./enable-state"
@@ -46,7 +45,10 @@ test.each([
   database.close()
 })
 
-test.each([details, context])("$id preserves disabled state from its shipping legacy declaration", (definition) => {
+// The built-ins the main composition lists with earlier ids, as the desktop app runs them.
+const renamed = builtins.flatMap((definition) => (definition.legacy ? [{ ...definition, legacy: definition.legacy }] : []))
+
+test.each(renamed)("$id preserves disabled state from its shipping legacy id", (definition) => {
   const database = openDatabase(":memory:")
   const manager = createManager(database.db, [definition])
   database.db.insert(extension).values({ id: definition.legacy[0], enabled: false }).run()
