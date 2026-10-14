@@ -181,11 +181,11 @@ const persistTerminal = (input: {
 }
 
 export const Terminal = (props: TerminalProps) => {
-  const extension = usePlugin()
-  const appearance = extension.appearance
-  const keybinds = extension.keybinds
-  const system = extension.system
-  const desktop = extension.desktop
+  const plugin = usePlugin()
+  const appearance = plugin.appearance
+  const keybinds = plugin.keybinds
+  const system = plugin.system
+  const desktop = plugin.desktop
   const theme = useTheme()
   let container!: HTMLDivElement
 
@@ -739,7 +739,7 @@ export const Terminal = (props: TerminalProps) => {
           if (disposed) return
 
           if (event.code === 1000) return
-          retry(new Error(extension.t("connectionLost.abnormalClose", { code: event.code })))
+          retry(new Error(plugin.t("connectionLost.abnormalClose", { code: event.code })))
         }
 
         drop = stop
@@ -756,8 +756,8 @@ export const Terminal = (props: TerminalProps) => {
       if (disposed) return
       showToast({
         variant: "error",
-        title: extension.t("connectionLost.title"),
-        description: err instanceof Error ? err.message : extension.t("connectionLost.description"),
+        title: plugin.t("connectionLost.title"),
+        description: err instanceof Error ? err.message : plugin.t("connectionLost.description"),
       })
       local.onConnectError?.(err)
     })

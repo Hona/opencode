@@ -109,7 +109,7 @@ export function createSessionRequestModel() {
     shells: () => data.shell.list({ directory: sdk().directory }),
   })
 
-  // Moving to the background and the extensions' background list stay with the primary session's own work.
+  // Moving to the background and the plugins' background list stay with the primary session's own work.
   const blocking = createMemo(() => (primary() ? running.blocking() : []))
   const tasks = createMemo(() => (primary() ? running.tasks() : []))
 

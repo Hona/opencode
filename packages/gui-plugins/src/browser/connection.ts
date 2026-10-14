@@ -102,7 +102,7 @@ export function createConnection(input: {
     input.change({ ...state }, mirror, native)
   }
 
-  // The pane itself is unreachable while its main extension restarts or is disabled, and main drops every
+  // The pane itself is unreachable while its main plugin restarts or is disabled, and main drops every
   // binding without reporting it. Keep the tabs, like an idle eviction, and register again when it returns.
   const suspend = (registration: Registration) => {
     if (disposed || state.registration !== registration) return
@@ -310,7 +310,7 @@ function open(
   }
 }
 
-// The bridge rejects with code "unavailable" while the pane's main extension is not running.
+// The bridge rejects with code "unavailable" while the pane's main plugin is not running.
 export function unavailable(cause: unknown) {
   return cause instanceof Error && "code" in cause && cause.code === "unavailable"
 }

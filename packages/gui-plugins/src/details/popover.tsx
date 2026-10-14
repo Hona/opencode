@@ -31,7 +31,7 @@ export function DetailsHeader(props: {
   const [store, setStore] = createStore({ dismissed: false })
   const project = createMemo(() => props.session.project)
 
-  // Review is optional: the changes row offers it only while the review extension is active.
+  // Review is optional: the changes row offers it only while the review plugin is active.
   const review = createMemo(() => {
     const live = changes()
 

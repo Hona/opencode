@@ -16,7 +16,7 @@ type Surface = "popover" | "dialog"
 
 // A session in a worktree of the project. The harness answers the MCP list for each location directory and stores
 // connect/disconnect results per directory; `requests` records every MCP request and the directory it targeted.
-// The popover belongs to the summary extension; the dialog (Ctrl+;) is the app's own MCP toggle.
+// The popover belongs to the summary plugin; the dialog (Ctrl+;) is the app's own MCP toggle.
 async function open(page: Page, input: { surface: Surface } & Pick<MockServerConfig, "mcp" | "onMcpAction">) {
   const requests: { path: string; directory: string }[] = []
   page.on("request", (request) => {

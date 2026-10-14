@@ -41,7 +41,7 @@ export function registerRendererScheme() {
         secure: true,
         standard: true,
         supportFetchAPI: true,
-        // Extension fonts and fetched assets are cross-origin to the renderer.
+        // Plugin fonts and fetched assets are cross-origin to the renderer.
         corsEnabled: true,
         stream: true,
         // Let Chromium keep V8 bytecode for the renderer bundle between launches.

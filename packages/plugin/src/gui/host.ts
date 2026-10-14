@@ -166,7 +166,7 @@ export interface EnableState {
  * @param state - Explicit saved rows, or the manager's resolved list.
  * @returns Whether the plugin is enabled.
  */
-export function extensionEnabled(id: string, state: readonly EnableState[]) {
+export function pluginEnabled(id: string, state: readonly EnableState[]) {
   return state.find((item) => item.id === id)?.enabled ?? true
 }
 
@@ -499,7 +499,7 @@ export interface BridgePluginGuis {
  * - `state`: an Ipc's new state for this window.
  * - `event`: an Ipc event.
  * - `available`: an Ipc's provider came or went.
- * - `extensions`: the installed list changed.
+ * - `installed`: the installed list changed.
  * - `pluginGuis`: the plugin GUIs main runs changed.
  * - `menubarItems`: the native menu's plugin items changed.
  */
@@ -532,7 +532,7 @@ export type BridgeMessage =
     }
   | {
       /** The installed list changed. */
-      readonly type: "extensions"
+      readonly type: "installed"
       /** The new list. */
       readonly list: readonly Installed[]
     }

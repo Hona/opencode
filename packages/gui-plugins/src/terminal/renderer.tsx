@@ -11,7 +11,7 @@ const setup: Setup<typeof Terminal> = (ctx) => {
   const model = createTerminalModel({ storage: ctx.storage, sessions })
 
   onCleanup(model.dispose)
-  // The host withdraws the listener with the extension.
+  // The host withdraws the listener with the plugin.
   ctx.workspaces.on("remove", model.remove)
 
   // The routed session's workspace stays loaded while no panel renders it, like the session route did.

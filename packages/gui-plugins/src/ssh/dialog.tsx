@@ -22,7 +22,7 @@ export function DialogSsh(props: {
   onConnected?: () => void
 }) {
   const dialog = useDialog()
-  const extension = usePlugin()
+  const plugin = usePlugin()
   const ssh = props.ssh
   // Entry-point behavior is fixed for the lifetime of this dialog.
   const openProject = props.onOpenProject
@@ -41,10 +41,10 @@ export function DialogSsh(props: {
   const item = createMemo(() => ssh.item(id))
 
   const error = createMemo(() => {
-    if (ssh.error(id)) return extension.t("common.requestFailed")
+    if (ssh.error(id)) return plugin.t("common.requestFailed")
     const error = item()?.error
 
-    return error ? extension.t(`error.${error}`) : undefined
+    return error ? plugin.t(`error.${error}`) : undefined
   })
 
   const busy = createMemo(
@@ -128,7 +128,7 @@ export function DialogSsh(props: {
     <Dialog fit class="settings-server-dialog">
       <DialogHeader hideClose={true}>
         <DialogTitle>
-          {prompted().value || props.config ? extension.t("connectTo", { host: sshName(state) }) : extension.t("add")}
+          {prompted().value || props.config ? plugin.t("connectTo", { host: sshName(state) }) : plugin.t("add")}
         </DialogTitle>
       </DialogHeader>
       <Divider />
@@ -141,7 +141,7 @@ export function DialogSsh(props: {
           >
             <div class="flex w-full min-w-0 flex-col gap-2">
               <label class="settings-server-dialog-label" for="ssh-target">
-                {extension.t("target")}
+                {plugin.t("target")}
               </label>
               <TextInput
                 id="ssh-target"
@@ -151,7 +151,7 @@ export function DialogSsh(props: {
                 dir="ltr"
                 value={state.target}
                 autofocus
-                placeholder={extension.t("placeholder")}
+                placeholder={plugin.t("placeholder")}
                 spellcheck={false}
                 autocomplete="off"
                 disabled={busy() || !!prompt()}
@@ -162,7 +162,7 @@ export function DialogSsh(props: {
             </div>
             <div class="flex w-full min-w-0 flex-col gap-2">
               <label class="settings-server-dialog-label" for="ssh-name">
-                {extension.t("form.name")}
+                {plugin.t("form.name")}
               </label>
               <TextInput
                 id="ssh-name"
@@ -171,7 +171,7 @@ export function DialogSsh(props: {
                 class="!w-full self-stretch"
                 dir="auto"
                 value={state.name}
-                placeholder={extension.t("form.namePlaceholder")}
+                placeholder={plugin.t("form.namePlaceholder")}
                 disabled={busy() || !!prompt()}
                 onInput={(event) => setState("name", event.currentTarget.value)}
                 onKeyDown={keyDown}
@@ -180,8 +180,8 @@ export function DialogSsh(props: {
           </Show>
           <Show when={item()?.stage === "incompatible"}>
             <div class="flex w-full min-w-0 flex-col gap-2" role="status" aria-live="polite">
-              <span class="text-14-medium text-v2-text-text-base">{extension.t("stage.incompatible")}</span>
-              <span class="text-13-regular text-v2-text-text-muted">{extension.t("error.version")}</span>
+              <span class="text-14-medium text-v2-text-text-base">{plugin.t("stage.incompatible")}</span>
+              <span class="text-13-regular text-v2-text-text-muted">{plugin.t("error.version")}</span>
             </div>
           </Show>
           <Show when={prompt()} keyed>
@@ -236,7 +236,7 @@ export function DialogSsh(props: {
           variant="neutral"
           onClick={() => dialog.close()}
         >
-          {extension.t("common.cancel")}
+          {plugin.t("common.cancel")}
         </Button>
         <Show
           when={prompt()}
@@ -247,18 +247,18 @@ export function DialogSsh(props: {
               onClick={() => start(item()?.stage === "incompatible")}
             >
               {busy()
-                ? extension.t("stage.connecting")
+                ? plugin.t("stage.connecting")
                 : item()?.stage === "incompatible"
-                  ? extension.t("update")
+                  ? plugin.t("update")
                   : props.config
-                    ? extension.t("connect")
-                    : extension.t("form.add")}
+                    ? plugin.t("connect")
+                    : plugin.t("form.add")}
             </Button>
           }
         >
           {(prompt) => (
             <Button variant="contrast" disabled={waiting() || (!prompt().confirm && !response())} onClick={respond}>
-              {waiting() ? extension.t("stage.connecting") : extension.t(prompt().confirm ? "trust" : "continue")}
+              {waiting() ? plugin.t("stage.connecting") : plugin.t(prompt().confirm ? "trust" : "continue")}
             </Button>
           )}
         </Show>

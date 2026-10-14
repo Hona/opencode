@@ -19,8 +19,8 @@ const story = (remote: { enabled: boolean; fails?: boolean }, main = true) => ({
 })
 
 export default {
-  title: "Extensions/Pairing",
-  id: "extensions-pairing",
+  title: "Plugins/Pairing",
+  id: "plugins-pairing",
   parameters: {
     docs: {
       description: {

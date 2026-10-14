@@ -36,8 +36,8 @@ type TerminalPanelState = {
 }
 
 export default function TerminalPanel(props: { model: TerminalModel; session: MountedSession; onClose: () => void }) {
-  const extension = usePlugin()
-  const keybinds = extension.keybinds
+  const plugin = usePlugin()
+  const keybinds = plugin.keybinds
   const frame = usePanel()
   const terminal = createMemo(() => props.model.load(props.session))
   const workspaceKey = () => terminal().key
@@ -115,7 +115,7 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Mo
         workspace: workspaceKey(),
         titles: terminal()
           .all()
-          .map((pty) => terminalTabLabel({ title: pty.title, titleNumber: pty.titleNumber, t: extension.t })),
+          .map((pty) => terminalTabLabel({ title: pty.title, titleNumber: pty.titleNumber, t: plugin.t })),
       }
     },
     (handoff) => props.model.handoff.set(handoff.workspace, handoff.titles),
@@ -232,11 +232,11 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Mo
             </For>
             <div class="flex-1" />
             <div class="text-text-weak pr-2">
-              {extension.t("common.loading")}
-              {extension.t("common.loading.ellipsis")}
+              {plugin.t("common.loading")}
+              {plugin.t("common.loading.ellipsis")}
             </div>
           </div>
-          <div class="flex-1 flex items-center justify-center text-text-weak">{extension.t("loading")}</div>
+          <div class="flex-1 flex items-center justify-center text-text-weak">{plugin.t("loading")}</div>
         </div>
       }
     >
@@ -293,7 +293,7 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Mo
                   <Tooltip
                     value={
                       <>
-                        {extension.t("command.new")}
+                        {plugin.t("command.new")}
                         <Show when={newTerminalKeybind().length > 0}>
                           <Keybind keys={newTerminalKeybind()} variant="neutral" />
                         </Show>
@@ -306,7 +306,7 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Mo
                       icon={<Icon name="plus-small" size="large" />}
                       variant="ghost"
                       onClick={() => terminal().new()}
-                      aria-label={extension.t("command.new")}
+                      aria-label={plugin.t("command.new")}
                     />
                   </Tooltip>
                 </div>

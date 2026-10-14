@@ -16,7 +16,7 @@ export function SortableTerminalTab(props: {
   index: number
   onClose?: () => void
 }): JSX.Element {
-  const extension = usePlugin()
+  const plugin = usePlugin()
 
   const sortable = useSortable({
     get id() {
@@ -38,7 +38,7 @@ export function SortableTerminalTab(props: {
   let editRequested = false
 
   const label = () =>
-    terminalTabLabel({ title: props.terminal.title, titleNumber: props.terminal.titleNumber, t: extension.t })
+    terminalTabLabel({ title: props.terminal.title, titleNumber: props.terminal.titleNumber, t: plugin.t })
 
   const close = () => {
     const count = props.workspace.all().length
@@ -137,7 +137,7 @@ export function SortableTerminalTab(props: {
               focus()
             }}
             onMiddleClick={close}
-            closeButton={<Tabs.CloseButton class="h-5 w-5" onClick={close} aria-label={extension.t("close")} />}
+            closeButton={<Tabs.CloseButton class="h-5 w-5" onClick={close} aria-label={plugin.t("close")} />}
             hideCloseButton
           >
             <span
@@ -173,8 +173,8 @@ export function SortableTerminalTab(props: {
               requestAnimationFrame(() => edit())
             }}
           >
-            <Menu.Item onSelect={() => (editRequested = true)}>{extension.t("common.rename")}</Menu.Item>
-            <Menu.Item onSelect={close}>{extension.t("common.close")}</Menu.Item>
+            <Menu.Item onSelect={() => (editRequested = true)}>{plugin.t("common.rename")}</Menu.Item>
+            <Menu.Item onSelect={close}>{plugin.t("common.close")}</Menu.Item>
           </Menu.Context.Content>
         </Menu.Context.Portal>
       </Menu.Context>

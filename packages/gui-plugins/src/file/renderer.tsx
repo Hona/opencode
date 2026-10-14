@@ -446,7 +446,7 @@ const setup: Setup<typeof File> = (ctx) => {
     ),
   })
 
-  // The review panel lists its changed files with the browser's tree; it renders under this extension, on the
+  // The review panel lists its changed files with the browser's tree; it renders under this plugin, on the
   // session screen's file model.
   ctx.provide(FileTree, {
     Tree: bindPlugin((props) => (

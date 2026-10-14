@@ -1,4 +1,4 @@
-/* File tabs and the Open file launcher: tighter close button, as the host strip styled them before extensions. */
+/* File tabs and the Open file launcher: tighter close button, as the host strip styled them before plugins. */
 :root body #review-panel [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"] [data-slot="tabs-list"] [data-slot="tabs-trigger-wrapper"]:is([data-value="file:open"], [data-value^="file://"])
 {
   gap: 8px;

@@ -165,7 +165,7 @@ const NoteFields = {
   comment: Schema.String,
 }
 
-/** An extension's comment on something other than workspace lines, as sent in message metadata. */
+/** A plugin's comment on something other than workspace lines, as sent in message metadata. */
 export const NoteComment = Persistence.struct(NoteFields)
 
 export type NoteComment = typeof NoteComment.Type
@@ -181,8 +181,8 @@ export function durableNote<Note extends NoteComment>(note: Note) {
   return Struct.omit(note, ["live"])
 }
 
-// Legacy data: desktop builds before extension notes stored browser element comments as their own type, in drafts
-// and in message metadata. They read as the browser extension's note, without the element ref of their process.
+// Legacy data: desktop builds before plugin notes stored browser element comments as their own type, in drafts
+// and in message metadata. They read as the browser plugin's note, without the element ref of their process.
 const LegacyBrowserComment = Persistence.struct({
   type: Schema.Literal("browser"),
   tabID: Schema.String,

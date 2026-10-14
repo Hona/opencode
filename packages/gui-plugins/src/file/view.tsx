@@ -197,7 +197,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
   const file = props.screen.file
   const comment = props.screen.comment
   const composer = props.screen.composer
-  // The stored side tab key doubles as the scroll key, as it did before extensions.
+  // The stored side tab key doubles as the scroll key, as it did before plugins.
   const key = () => `file:${props.id}`
   const active = () => shared.active(props.session, props.id)
 

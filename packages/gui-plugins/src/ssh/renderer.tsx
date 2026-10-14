@@ -40,7 +40,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   const ssh = createSshController({
     items: () => state()?.servers ?? [],
     api: client,
-    // Resolves once main publishes the revision; disabling the extension resolves it early.
+    // Resolves once main publishes the revision; disabling the plugin resolves it early.
     refresh: (revision) =>
       new Promise<void>((resolve) =>
         createRoot((dispose) => {

@@ -15,7 +15,7 @@ export default function WslRow(props: {
   pending: (key: string) => boolean
   request: <T>(key: string, action: () => Promise<T>) => void
 }) {
-  const extension = usePlugin()
+  const plugin = usePlugin()
   const check = () => props.state()?.opencodeChecks[props.distro]
   const opencodeAction = () => wslOpencodeAction(check())
 
@@ -35,7 +35,7 @@ export default function WslRow(props: {
               <span class="flex min-w-0 items-center gap-1">
                 <span class="settings-servers-name">{props.distro}</span>
                 <span class="shrink-0 rounded-[3px] border border-v2-border-border-base px-1 py-0.5 text-[9px] leading-none text-v2-text-text-muted">
-                  {extension.t("server.label")}
+                  {plugin.t("server.label")}
                 </span>
               </span>
               <span class="settings-servers-meta">
@@ -51,7 +51,7 @@ export default function WslRow(props: {
                   disabled={busy() || props.pending(props.row.key)}
                   onClick={() => props.request(props.row.key, () => api().installOpencode({ name: props.distro }))}
                 >
-                  {busy() ? extension.t("server.updating") : extension.t(label())}
+                  {busy() ? plugin.t("server.updating") : plugin.t(label())}
                 </Button>
               )}
             </Show>
@@ -61,19 +61,19 @@ export default function WslRow(props: {
                 variant="ghost-muted"
                 size="small"
                 icon={<Icon name="outline-dots" />}
-                aria-label={extension.t("common.moreOptions")}
+                aria-label={plugin.t("common.moreOptions")}
               />
               <Menu.Portal>
                 <Menu.Content>
                   <Menu.Group>
-                    <Menu.GroupLabel>{extension.t("server.menu.label")}</Menu.GroupLabel>
+                    <Menu.GroupLabel>{plugin.t("server.menu.label")}</Menu.GroupLabel>
                     <props.row.Items />
                     <Menu.Separator />
                     <Menu.Item
                       disabled={props.pending(props.row.key)}
                       onSelect={() => props.request(props.row.key, () => props.row.remove())}
                     >
-                      {extension.t("menu.remove")}
+                      {plugin.t("menu.remove")}
                     </Menu.Item>
                   </Menu.Group>
                 </Menu.Content>

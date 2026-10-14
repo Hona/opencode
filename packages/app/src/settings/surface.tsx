@@ -4,16 +4,16 @@ import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useLayout, type LayoutRoute } from "@/shell/state/layout"
 import { useCommand } from "@/shell/commands/command"
-import { createSettingsPages } from "@/runtime/extension/settings-pages"
+import { createSettingsPages } from "@/runtime/plugin/settings-pages"
 import { useSettingsServers } from "./servers/inventory"
 import {
-  isExtensionTab,
+  isPluginTab,
   isProjectTab,
   isRootTab,
   isServerTab,
   parseSettingsView,
   settingsViewUrl,
-  type SettingsExtensionTab,
+  type SettingsPluginTab,
   type SettingsProjectTab,
   type SettingsRootTab,
   type SettingsServerTab,
@@ -22,7 +22,7 @@ import {
 } from "./route"
 
 export type {
-  SettingsExtensionTab,
+  SettingsPluginTab,
   SettingsHostView,
   SettingsProjectTab,
   SettingsRootTab,
@@ -43,12 +43,12 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
       settings?: { route: Exclude<LayoutRoute, { type: "settings" }>; view?: SettingsTransientView }
     }>()
 
-    const extensions = createSettingsPages()
+    const plugins = createSettingsPages()
     const open = () => layout.route().type === "settings"
     const source = () => location.state?.settings?.route ?? { type: "home" as const }
 
     const view = () =>
-      parseSettingsView(location.search, servers().length > 1, location.state?.settings?.view, extensions.tabs())
+      parseSettingsView(location.search, servers().length > 1, location.state?.settings?.view, plugins.tabs())
 
     const [search, setSearch] = createStore<{
       query: string
@@ -103,7 +103,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
       active: open,
       route: source,
       view,
-      extensions,
+      plugins,
       search: {
         state: search,
         input(query: string) {
@@ -138,7 +138,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
           return true
         },
       },
-      open(tab: SettingsRootTab | SettingsExtensionTab = "general") {
+      open(tab: SettingsRootTab | SettingsPluginTab = "general") {
         show({ type: "root", tab })
       },
       openServer(server: string, tab: SettingsServerTab = "general") {
@@ -159,7 +159,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
         const current = view()
 
         const next: SettingsView =
-          current.type === "root" && (isRootTab(tab) || isExtensionTab(tab, extensions.tabs()))
+          current.type === "root" && (isRootTab(tab) || isPluginTab(tab, plugins.tabs()))
             ? { ...current, tab }
             : current.type === "server" && isServerTab(tab)
               ? { ...current, tab }

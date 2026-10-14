@@ -47,7 +47,7 @@ const setup: Setup<typeof Btw> = (ctx) => {
     id: "main",
     region: "side",
     transient: true,
-    // Layouts saved before extensions store the tab as "btw"; as a panel key it leaves like any unlisted transient tab.
+    // Layouts saved before plugins store the tab as "btw"; as a panel key it leaves like any unlisted transient tab.
     legacy: { btw: "main" },
     // One tab per stored question. Until the session's store loads, its tabs stay listed but hidden so restore keeps
     // them; afterwards a tab without a stored question leaves the strip.

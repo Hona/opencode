@@ -293,7 +293,7 @@ for (const listed of [false, true]) {
 }
 
 test("context closes the side region only when its button opened it", async ({ page }) => {
-  // A /btw tab saved before extensions must not linger as a hidden tab that keeps the region open.
+  // A /btw tab saved before plugins must not linger as a hidden tab that keeps the region open.
   await openSession(page, {
     name: "ReviewContextOpener",
     seed: {
@@ -1022,7 +1022,7 @@ test("shows and restores last turn changes from the session diff", async ({ page
   await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("delta.ts")
 })
 
-test("keeps the review state a session stored before extensions", async ({ page }) => {
+test("keeps the review state a session stored before plugins", async ({ page }) => {
   const directory = "C:/OpenCode/ReviewLegacy"
   await openSession(page, {
     name: "ReviewLegacy",

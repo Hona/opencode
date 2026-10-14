@@ -3,7 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { createMemo, Show, type Component } from "solid-js"
 import { ServerRowMenu } from "@/servers/registry/row-menu"
 import { ServerHealthIndicator } from "@/servers/registry/row"
-import { ExtensionServerRow } from "@/servers/registry/extension-row"
+import { PluginServerRow } from "@/servers/registry/plugin-row"
 import { AddServerMenu } from "@/servers/registry/add-menu"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
@@ -88,7 +88,7 @@ export const SettingsServerGeneral: Component<{
                 </Show>
               }
             >
-              {(key) => <ExtensionServerRow server={key} controller={controller} />}
+              {(key) => <PluginServerRow server={key} controller={controller} />}
             </Show>
           </SettingsList>
         </section>

@@ -9,7 +9,7 @@ import { isSshConnecting, sshName } from "./name"
 import type { SshController } from "./state"
 
 export default function SshRow(props: { row: ServerRow; id: string; ssh: SshController }) {
-  const extension = usePlugin()
+  const plugin = usePlugin()
   const pending = () => props.ssh.pending(props.id)
 
   return (
@@ -39,7 +39,7 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
                     {sshName(item().config)}
                   </bdi>
                   <span class="shrink-0 rounded-[3px] border border-v2-border-border-base px-1 py-0.5 text-[9px] leading-none text-v2-text-text-muted">
-                    {extension.t("label")}
+                    {plugin.t("label")}
                   </span>
                 </span>
                 <Show
@@ -50,7 +50,7 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
                     </Show>
                   }
                 >
-                  <span class="settings-servers-meta">{extension.t("stage.authentication")}</span>
+                  <span class="settings-servers-meta">{plugin.t("stage.authentication")}</span>
                 </Show>
               </div>
             </div>
@@ -66,7 +66,7 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
                   <Show when={pending()}>
                     <Spinner class="size-3.5" />
                   </Show>
-                  {pending() ? extension.t("session.connecting") : extension.t("action.authenticate")}
+                  {pending() ? plugin.t("session.connecting") : plugin.t("action.authenticate")}
                 </Button>
               </Show>
               <Menu gutter={4} modal={false} placement="bottom-end">
@@ -75,15 +75,15 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
                   variant="ghost-muted"
                   size="small"
                   icon={<Icon name="outline-dots" />}
-                  aria-label={extension.t("common.moreOptions")}
+                  aria-label={plugin.t("common.moreOptions")}
                 />
                 <Menu.Portal>
                   <Menu.Content>
                     <Menu.Group>
-                      <Menu.GroupLabel>{extension.t("server.menu.label")}</Menu.GroupLabel>
+                      <Menu.GroupLabel>{plugin.t("server.menu.label")}</Menu.GroupLabel>
                       <props.row.Items />
                       <Menu.Separator />
-                      <Menu.Item onSelect={() => void props.row.remove()}>{extension.t("menu.delete")}</Menu.Item>
+                      <Menu.Item onSelect={() => void props.row.remove()}>{plugin.t("menu.delete")}</Menu.Item>
                     </Menu.Group>
                   </Menu.Content>
                 </Menu.Portal>

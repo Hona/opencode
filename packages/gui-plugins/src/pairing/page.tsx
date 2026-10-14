@@ -33,7 +33,7 @@ export default function PairingPage(props: {
   pairing: Accessor<Live<Client>>
 }) {
   const ctx = usePlugin<typeof definition>()
-  // The extension's dialogs close with it, so disabling pairing also stops the dialog's code polling.
+  // The plugin's dialogs close with it, so disabling pairing also stops the dialog's code polling.
   const dialogs = ctx.dialogs
   const queryClient = useQueryClient()
 

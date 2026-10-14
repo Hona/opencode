@@ -302,7 +302,7 @@ export type Live<T> =
       readonly reason: "disabled" | "failed" | "blocked" | "restarting"
     }
 
-const live = Symbol.for("opencode.extension.live")
+const live = Symbol.for("opencode.plugin.live")
 
 /**
  * Helpers for `Live` accessors. Plugin code reads `ctx.uses.*` and passes them to `createKeyed`; it rarely calls

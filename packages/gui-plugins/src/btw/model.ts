@@ -23,7 +23,7 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
   }
 
   // In-flight questions keep running when the user leaves their session and answer into its store; only a reload,
-  // closing the question's tab or disposing the extension abandons one, which leaves it retryable.
+  // closing the question's tab or disposing the plugin abandons one, which leaves it retryable.
   onCleanup(() => Array.from(controllers.keys()).forEach(stop))
 
   const entry = (session: MountedSession, id: string) => saved(session).value?.chats.find((item) => item.id === id)

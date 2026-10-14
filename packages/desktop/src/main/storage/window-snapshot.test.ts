@@ -18,7 +18,7 @@ test.each(["missing", "unreadable"])("a $s database distinguishes default enable
   if (input === "unreadable") await Bun.write(path.join(root, "drafts.sqlite"), "not a SQLite database")
 
   expect(readWindowSnapshot(root, ["shell"])).toEqual(
-    input === "missing" ? { storage: {}, extensions: [] } : { storage: {} },
+    input === "missing" ? { storage: {}, plugins: [] } : { storage: {} },
   )
 })
 
@@ -36,6 +36,6 @@ test.each([false, true])("the early snapshot keeps explicit rows even with legac
 
   expect(readWindowSnapshot(root, ["shell"])).toEqual({
     storage: legacy ? {} : { shell: { items: { theme: "dark" }, revision: 0 } },
-    extensions: [{ id: "previous", enabled: false }, { id: "current", enabled: true }],
+    plugins: [{ id: "previous", enabled: false }, { id: "current", enabled: true }],
   })
 })

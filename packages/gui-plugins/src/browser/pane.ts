@@ -349,7 +349,7 @@ export function createBrowserPane(input: {
       close(entry)
     },
     /**
-     * The extension is going away (reload, disable, or quit). Windows keep each pane's tabs as a
+     * The plugin is going away (reload, disable, or quit). Windows keep each pane's tabs as a
      * suspended attachment, like an idle server eviction, and register again once the pane is back.
      */
     async dispose() {

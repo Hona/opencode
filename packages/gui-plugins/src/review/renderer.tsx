@@ -65,7 +65,7 @@ const setup: Setup<typeof Review> = (ctx) => {
     return () => set(source, (count) => Math.max(0, count - 1))
   }
 
-  // One review model per session screen, like the review the screen created before extensions, created once the
+  // One review model per session screen, like the review the screen created before plugins, created once the
   // screen routes a session. It follows the routed session, a new object on each switch, through `view`.
   const [entry, setEntry] = createSignal<{ screen: SessionScreen; model: ReviewModel; dispose: () => void }>()
 
@@ -141,7 +141,7 @@ const setup: Setup<typeof Review> = (ctx) => {
     get wide() {
       return diff.value.diffStyle === "split"
     },
-    // The review tab is pinned, never stored; a stored key, such as one from before extensions, leaves the strip.
+    // The review tab is pinned, never stored; a stored key, such as one from before plugins, leaves the strip.
     transient: true,
     legacy: { review: TAB },
     mobile: {
@@ -218,7 +218,7 @@ const setup: Setup<typeof Review> = (ctx) => {
       if (!session || (link.session && link.session.key !== session.key)) return
 
       batch(() => {
-        // Narrow screens keep their view, as they did before extensions.
+        // Narrow screens keep their view, as they did before plugins.
         if (!layout.narrow() && session.project) layout.open(KEY, session)
 
         reveals.forEach((listener) => listener())
