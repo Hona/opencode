@@ -2,6 +2,7 @@ import { isBuiltin } from "node:module"
 import path from "node:path"
 import type { Plugin } from "vite"
 import solid from "vite-plugin-solid"
+import { pluginSharedModules, pluginWindowModules } from "./modules.js"
 
 /** Where `gui()` reads a plugin's GUI and writes its `./gui` bundle. */
 export interface GuiOptions {
@@ -12,23 +13,7 @@ export interface GuiOptions {
 }
 
 // The modules the app provides to a plugin's GUI, each the app's own instance; the bundle must not include a copy.
-// Keep in step with `pluginSharedModules` and `pluginWindowModules` in `./host.ts`.
-const provided = new Set([
-  "effect",
-  "@opencode/plugin/gui",
-  "@opencode/plugin/gui/main",
-  "@opencode/plugin/gui/file",
-  "@opencode/plugin/gui/review",
-  "@opencode/plugin/gui/browser",
-  "@opencode/plugin/gui/updater",
-  "@opencode/schema/rpc",
-  "@opencode/client",
-  "@opencode/client/effect",
-  "@opencode/client/solid",
-  "solid-js",
-  "solid-js/web",
-  "solid-js/store",
-])
+const provided = new Set<string>([...pluginSharedModules, ...pluginWindowModules])
 
 /**
  * Builds a plugin's `./gui` bundle with Vite: compiles Solid JSX, writes one CommonJS file with every dynamic `import()`

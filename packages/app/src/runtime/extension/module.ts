@@ -11,6 +11,7 @@ const modules = {
   "@opencode/plugin/gui/review": () => import("@opencode/plugin/gui/review"),
   "@opencode/plugin/gui/browser": () => import("@opencode/plugin/gui/browser"),
   "@opencode/plugin/gui/updater": () => import("@opencode/plugin/gui/updater"),
+  "@opencode/plugin/rpc": () => import("@opencode/plugin/rpc"),
   "@opencode/schema/rpc": () => import("@opencode/schema/rpc"),
   "@opencode/client": () => import("@opencode/client"),
   "@opencode/client/effect": () => import("@opencode/client/effect"),
