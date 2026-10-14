@@ -6,26 +6,149 @@
 
 import type { PluginInfo } from "@opencode/client/promise"
 import { Predicate, Schema } from "effect"
-import type { Cleanup, Composition, Definition } from "./core.js"
+import type { Cleanup, Declared, Ipc, IpcRef, OS, PluginOptions, TokenId } from "./core.js"
+import type { Declarations } from "./declarations.js"
 import type { MainSetup } from "./main.js"
 
 /**
+ * A plugin as a host runs it: its `Plugin.Declarations`, plus the setups the host loads lazily. A built-in's entries
+ * are its `renderer.tsx` and `main.ts`; a plugin's `./gui` bundle becomes a window entry that runs its `setup`.
+ */
+export interface Entry extends Declarations {
+  /** Loads the window setup (`Plugin.Setup<typeof definition>`). */
+  readonly windowEntry?: () => Promise<{
+    /** The window setup. */
+    readonly default: (ctx: never) => Cleanup | void
+  }>
+  /** Loads the main setup (`Plugin.MainSetup<typeof definition>`). */
+  readonly mainEntry?: () => Promise<{
+    /** The main setup. */
+    readonly default: (ctx: never) => Cleanup | void | Promise<Cleanup | void>
+  }>
+}
+
+/**
  * Composes the app's built-in plugins for one process, the way the host lists them: each built-in's `Plugin.define`
- * declarations plus the lazy entries only the host reads (`renderer`, `main`). Fails to compile, naming the token id,
- * when a `requires` token has no provider (`Missing<"id">`), when two built-ins provide the same token
+ * declarations plus the entries the host loads lazily (`windowEntry`, `mainEntry`). Fails to compile, naming the token
+ * id, when a `requires` token has no provider (`Missing<"id">`), when two built-ins provide the same token
  * (`Duplicate<"id">`), or when two share an id (`DuplicatePluginId<"id">`).
  *
- * @param definitions - Every built-in of one process.
- * @returns The same definitions, as an array.
+ * @param entries - Every built-in of one process.
+ * @returns The same entries, as an array.
  *
  * @example
  * ```ts
- * export const builtins = compose({ ...pairing, main: () => import("./pairing/main") }, review)
+ * export const builtins = compose({ ...pairing, mainEntry: () => import("./pairing/main") }, review)
  * ```
  */
-export function compose<const Ds extends readonly Definition[]>(...definitions: Ds & Composition<Ds>): Ds {
-  return definitions
+export function compose<const Es extends readonly Entry[]>(...entries: Es & Composition<Es>): Es {
+  return entries
 }
+
+/**
+ * Whether a plugin runs on this system: it lists no OS, or lists this one. On the web, where no OS is known, only a
+ * plugin that lists none runs. Both hosts apply it to built-ins and plugins alike.
+ *
+ * @param declarations - The plugin's declared `os`.
+ * @param os - This system, or undefined on the web.
+ * @returns True when the plugin runs here.
+ */
+export function runsOn(declarations: Pick<Declarations, "os">, os: OS | undefined) {
+  return !declarations.os || (!!os && declarations.os.includes(os))
+}
+
+declare const problem: unique symbol
+
+/** `compose`'s error: a `requires` token that no plugin in the composition provides. */
+export interface Missing<Id extends string> {
+  /** The token's id. */
+  readonly [problem]: Id
+}
+
+/** `compose`'s error: a token that two plugins in the composition provide. */
+export interface Duplicate<Id extends string> {
+  /** The token's id. */
+  readonly [problem]: Id
+}
+
+/** `compose`'s error: two entries use the same plugin id. */
+export interface DuplicatePluginId<Id extends string> {
+  /** The repeated plugin id. */
+  readonly [problem]: Id
+}
+
+/** `IpcsProvided`'s error: a window `provides`, `uses` or `requires` of an Ipc that no main entry provides. */
+export interface MissingMain<Id extends string> {
+  /** The Ipc's id. */
+  readonly [problem]: Id
+}
+
+type Literal<Id> = Id extends string ? (string extends Id ? never : Id) : never
+
+// Distributes over a union of entries, so each contributes its own declared ids.
+type Ids<D, K extends "provides" | "uses" | "requires"> = D extends unknown
+  ? TokenId<Declared<D, K>[keyof Declared<D, K>]>
+  : never
+
+type Others<Ds extends readonly unknown[], I> = { [J in keyof Ds]: J extends I ? never : Ds[J] }[number]
+
+type MissingIds<Ds extends readonly unknown[]> = Exclude<Ids<Ds[number], "requires">, Ids<Ds[number], "provides">>
+
+type DuplicateIds<Ds extends readonly unknown[]> = {
+  [I in keyof Ds]: Literal<Ids<Ds[I], "provides">> & Ids<Others<Ds, I>, "provides">
+}[number]
+
+type EntryId<D> = D extends { readonly id: infer Id } ? Literal<Id> : never
+
+type RepeatedIds<Ds extends readonly unknown[]> = {
+  [I in keyof Ds]: EntryId<Ds[I]> & EntryId<Others<Ds, I>>
+}[number]
+
+/** Compile errors for a composition; `unknown` when it is valid. */
+export type Composition<Ds extends readonly unknown[]> = [RepeatedIds<Ds>] extends [never]
+  ? ProvidersCheck<Ds>
+  : {
+      /** Two entries share this plugin id. */
+      readonly "duplicate plugin id": DuplicatePluginId<RepeatedIds<Ds>>
+    }
+
+type ProvidersCheck<Ds extends readonly unknown[]> = [MissingIds<Ds>] extends [never]
+  ? [DuplicateIds<Ds>] extends [never]
+    ? unknown
+    : {
+        /** Two plugins provide this token. */
+        readonly "duplicate provider": Duplicate<DuplicateIds<Ds>>
+      }
+  : {
+      /** No plugin provides this `requires` token. */
+      readonly "missing provider": Missing<MissingIds<Ds>>
+    }
+
+type IpcIds<D, K extends "provides" | "uses" | "requires"> = D extends unknown
+  ? TokenId<Extract<Declared<D, K>[keyof Declared<D, K>], Ipc | IpcRef>>
+  : never
+
+// A window reads its own `provides` through `ctx.uses` too, so those Ipcs need a main entry as well.
+type MissingIpcs<R extends readonly unknown[], M extends readonly unknown[]> = Exclude<
+  IpcIds<R[number], "provides"> | IpcIds<R[number], "uses"> | IpcIds<R[number], "requires">,
+  IpcIds<Extract<M[number], { readonly mainEntry: unknown }>, "provides">
+>
+
+/**
+ * `true` when every Ipc the window composition `R` declares in `provides`, `uses` or `requires` is provided by an entry
+ * with a main setup in the main composition `M`; otherwise an error type naming the Ipc. Check it once in a file that
+ * imports both compositions.
+ *
+ * @example
+ * ```ts
+ * export const ipcs: IpcsProvided<typeof renderer, typeof main> = true
+ * ```
+ */
+export type IpcsProvided<R extends readonly unknown[], M extends readonly unknown[]> = [MissingIpcs<R, M>] extends [
+  never,
+]
+  ? true
+  : MissingMain<MissingIpcs<R, M>>
 
 /** One explicit desktop enable-state row. An absent row means there is no setting under that id. */
 export interface EnableState {
@@ -158,13 +281,10 @@ export function inertModule(name: string): InertModule {
 /** A placeholder `inertModule` returns: it answers every property read, call and construction with itself. */
 export type InertModule = () => void
 
-/** The declarations of a plugin's GUI the host reads. */
-export type PluginDefinition = Pick<Definition, "id" | "os" | "provides" | "uses" | "requires" | "stores" | "i18n">
-
 /** A plugin's `./gui` bundle as `evaluatePluginBundle` read it. */
 export interface PluginBundle {
   /** The declarations of its `Plugin.define`, checked. */
-  readonly definition: PluginDefinition
+  readonly definition: Declarations
   /** Its window `setup`; undefined in a plugin for main only. */
   readonly setup?: (ctx: never) => Cleanup | void
   /** Its `main` setup; undefined in a plugin for windows only. */
@@ -224,13 +344,13 @@ export function evaluatePluginBundle(code: string, host: PluginBundleHost): Plug
       id,
       os: plugin.os,
       // SAFETY: `matchesPlugin` checked the tokens the host reads, and `is` keeps each token's identity and spec.
-      provides: plugin.provides as PluginDefinition["provides"],
+      provides: plugin.provides as Declarations["provides"],
       // SAFETY: as above, in a window; main drops them.
-      uses: host.process === "window" ? (plugin.uses as PluginDefinition["uses"]) : undefined,
+      uses: host.process === "window" ? (plugin.uses as Declarations["uses"]) : undefined,
       // SAFETY: as above.
-      requires: host.process === "window" ? (plugin.requires as PluginDefinition["requires"]) : undefined,
+      requires: host.process === "window" ? (plugin.requires as Declarations["requires"]) : undefined,
       // SAFETY: `matchesPlugin` checked each store's scope and schema; `is` keeps the declaration whole.
-      stores: plugin.stores as PluginDefinition["stores"],
+      stores: plugin.stores as Declarations["stores"],
       i18n: plugin.i18n && { ...plugin.i18n, en: plugin.i18n.en ?? {} },
     },
     // SAFETY: a bundle is plain JavaScript; a function is all the host can check of a setup.
@@ -287,7 +407,7 @@ const matchesPlugin = Schema.is(
  * @param builtins - The host's built-in definitions, on every OS.
  * @returns True when no built-in claims the id.
  */
-export function pluginIdAvailable(id: string, builtins: readonly Pick<Definition, "id">[]) {
+export function pluginIdAvailable(id: string, builtins: readonly Pick<Declarations, "id">[]) {
   return [{ id: "opencode" }, ...builtins].every(
     (taken) => id !== taken.id && !id.startsWith(`${taken.id}.`) && !taken.id.startsWith(`${id}.`),
   )
@@ -342,7 +462,7 @@ export interface Installed {
 
 /**
  * Whether a server plugin's GUI loads: an active plugin with an id, not one of the server's own built-ins, that exports
- * `./gui`. Both hosts list plugins with it; `pluginIdAvailable` then checks the id against their built-ins.
+ * `./gui`. Main lists plugins with it; `pluginIdAvailable` then checks the id against the built-ins.
  *
  * @param plugin - A plugin as the server lists it.
  * @returns True when the plugin's `./gui` bundle should load.
@@ -354,12 +474,33 @@ export function shipsPluginGui(plugin: PluginInfo): plugin is PluginInfo & {
   return !!plugin.id && plugin.source.type !== "builtin" && plugin.state.status === "active" && !!plugin.features.gui
 }
 
+/** A plugin's GUI as main read it from the desktop app's own server: what every window evaluates. */
+export interface BridgePluginGui {
+  /** The server plugin's id, which its GUI takes. */
+  readonly id: string
+  /** The bundle's opaque revision; a new one makes a window evaluate the bundle again. */
+  readonly revision: string
+  /** The bundle's CommonJS code. */
+  readonly code: string
+  /** The plugin's options from `opencode.json`, its GUI's `ctx.options`. */
+  readonly options: PluginOptions
+}
+
+/** The plugin GUIs main runs. Main alone lists them; windows load what it sends. */
+export interface BridgePluginGuis {
+  /** The plugins whose GUI loads on this system, after main's id and OS checks. */
+  readonly plugins: readonly BridgePluginGui[]
+  /** Plugins whose GUI cannot load because a built-in claims the id; Settings › Plugins reports them. */
+  readonly reserved: readonly string[]
+}
+
 /**
  * A message main pushes to a window.
  * - `state`: an Ipc's new state for this window.
  * - `event`: an Ipc event.
  * - `available`: an Ipc's provider came or went.
- * - `plugins`: the installed list changed.
+ * - `extensions`: the installed list changed.
+ * - `pluginGuis`: the plugin GUIs main runs changed.
  * - `menubarItems`: the native menu's plugin items changed.
  */
 export type BridgeMessage =
@@ -395,6 +536,10 @@ export type BridgeMessage =
       /** The new list. */
       readonly list: readonly Installed[]
     }
+  | ({
+      /** The plugin GUIs main runs changed. */
+      readonly type: "pluginGuis"
+    } & BridgePluginGuis)
   | {
       /** The native menu's plugin items changed. */
       readonly type: "menubarItems"
@@ -496,11 +641,12 @@ export interface Bridge {
     }[],
   ): void
   /**
-   * Tells main that the plugins on the desktop app's own server may have changed, as the window learned from that
-   * server's `plugin.updated` event or a reconnect. Main lists them and reads their `./gui` bundles from that server
-   * itself; the window sends no data, so one window's failed read never changes what main runs.
+   * The plugin GUIs main runs. Main lists the plugins on the desktop app's own server and reads their `./gui` bundles
+   * itself, following that server's `plugin.updated` event; a `pluginGuis` message brings each change after this.
+   *
+   * @returns The plugins whose GUI loads, and the ids a built-in claims.
    */
-  pluginsChanged(): void
+  pluginGuis(): Promise<BridgePluginGuis>
   /** The plugin manager. */
   readonly manager: {
     /**

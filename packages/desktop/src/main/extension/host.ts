@@ -1,6 +1,13 @@
 import { app, BrowserWindow } from "electron"
 import { builtins } from "@opencode/gui-plugins/main"
-import { pluginIdAvailable, shipsPluginGui, type BridgeLayout, type BridgeMenubarItem } from "@opencode/plugin/gui/host"
+import {
+  pluginIdAvailable,
+  runsOn,
+  shipsPluginGui,
+  type BridgeLayout,
+  type BridgeMenubarItem,
+  type Entry,
+} from "@opencode/plugin/gui/host"
 import {
   MenubarItem,
   type BaseContext,
@@ -9,7 +16,6 @@ import {
   type Catalog,
   type Cleanup,
   type Cli,
-  type Definition,
   type Embeds,
   type Ipc,
   type IpcImpl,
@@ -35,6 +41,7 @@ import {
   ExtensionAvailable,
   ExtensionEvent,
   ExtensionMenubarItemsChanged,
+  ExtensionPluginGuisChanged,
   ExtensionState,
   ExtensionsChanged,
   type DesktopEvent,
@@ -66,13 +73,30 @@ export type ExtensionHost = ReturnType<typeof createHost>
 type Loaded = {
   readonly setup: MainSetup
   readonly i18n?: Catalog
-  readonly stores?: Definition["stores"]
+  readonly stores?: Entry["stores"]
   /** The declared `provides`, the only Ipcs it may provide. */
-  readonly provides?: NonNullable<Definition["provides"]>
+  readonly provides?: NonNullable<Entry["provides"]>
   /** A plugin's options from `opencode.json`; built-ins have none. */
   readonly options?: PluginOptions
   /** The client of the server that runs a plugin, read each time; built-ins have none. */
   readonly client?: () => OpenCodeClient | undefined
+}
+
+/** A plugin's `./gui` bundle as main read it, evaluated once per revision; a failed evaluation fails its activation. */
+type ListedPlugin = {
+  readonly bundle: PluginGuiBundle
+  readonly loaded:
+    | { readonly ok: true; readonly value: Awaited<ReturnType<typeof evaluateMain>> }
+    | { readonly ok: false; readonly cause: unknown }
+}
+
+/** What main keeps of the plugin listing besides the plugins: the ids a built-in claims, and the follow of the server. */
+type Inventory = {
+  reserved: readonly string[]
+  /** Aborts the current follow of the app's own server. */
+  watch?: AbortController
+  /** Stops following the server's connections. */
+  stop?: () => void
 }
 
 const loadClient = () => import("@opencode/client")
@@ -106,7 +130,7 @@ type HostApis = {
 /** A contribution as `add` stores it, with its registry's item type erased; `list` restores it. */
 type Item = Parameters<MainContext["add"]>[1]
 
-type Entry = { readonly registry: string; readonly extension: string; readonly value: Item }
+type Contribution = { readonly registry: string; readonly extension: string; readonly value: Item }
 
 type Translation = { readonly catalog?: Catalog; messages: Messages }
 
@@ -137,16 +161,18 @@ export function createHost(input: {
     data: Data,
   ) => void
 }) {
-  const definitions: readonly Definition[] = builtins
-  const local = definitions.filter((definition) => !definition.os || definition.os.includes(os))
+  const definitions: readonly Entry[] = builtins
+  const local = definitions.filter((definition) => runsOn(definition, os))
 
   const manager = createManager(input.db)
 
   const embeds = createEmbeds()
-  // Plugins on the app's own server that ship a `./gui` bundle, each at the bundle main last read and runs. Main lists
-  // and reads them from that server first-hand, never from a window.
-  const plugins = new Map<string, PluginGuiBundle>()
-  const entries = new Map<string, Entry>()
+  // Plugins on the app's own server that ship a `./gui` bundle, each at the bundle main last read and runs. Main alone
+  // lists and reads them, from that server first-hand; windows load what main sends.
+  const plugins = new Map<string, ListedPlugin>()
+  // The ids of plugins a built-in claims, and the follow of the app's own server.
+  const inventory: Inventory = { reserved: [] }
+  const entries = new Map<string, Contribution>()
   const ipcs = new Map<string, Provider>()
   // Each live instance's catalog and messages, so a locale change reaches them.
   const translations = new Set<Translation>()
@@ -295,7 +321,7 @@ export function createHost(input: {
     const builtin = local.find((definition) => definition.id === id)
 
     if (builtin) {
-      const main = builtin.main
+      const main = builtin.mainEntry
 
       if (!main) return undefined
 
@@ -311,20 +337,14 @@ export function createHost(input: {
         )
     }
 
-    const bundle = plugins.get(id)
+    const plugin = plugins.get(id)
 
-    if (!bundle) return undefined
+    if (!plugin) return undefined
 
     return async () => {
-      const loaded = await evaluateMain(bundle.code, id)
+      if (!plugin.loaded.ok) throw plugin.loaded.cause
 
-      // A plugin limited to other systems loads, so its declarations and stores stay known, but its setup never runs.
-      return prepare(id, {
-        ...loaded,
-        setup: !loaded.os || loaded.os.includes(os) ? loaded.setup : () => {},
-        options: bundle.options,
-        client: sidecarClient,
-      })
+      return prepare(id, { ...plugin.loaded.value, options: plugin.bundle.options, client: sidecarClient })
     }
   }
 
@@ -346,9 +366,37 @@ export function createHost(input: {
     return sidecar.client
   }
 
+  // Follows the app's own server, as the TUI does: lists its plugins on each connection and each `plugin.updated`.
+  // Every connection and reconnect of the server starts a new follow, so a new endpoint is followed at once.
+  const watchPlugins = async () => {
+    sidecar.module ??= await loadClient()
+    const client = sidecarClient()
+
+    if (!client || status.disposed) return
+    inventory.watch?.abort()
+    const watch = new AbortController()
+    inventory.watch = watch
+    relistPlugins()
+    void followPlugins(client, watch.signal)
+  }
+
+  const followPlugins = async (client: OpenCodeClient, signal: AbortSignal) => {
+    while (!signal.aborted) {
+      await readEvents(client, signal).catch(() => undefined)
+
+      if (signal.aborted) return
+      // The stream ended while the endpoint stayed the same; subscribe again after a pause.
+      await new Promise((resolve) => setTimeout(resolve, 1_000))
+    }
+  }
+
+  const readEvents = async (client: OpenCodeClient, signal: AbortSignal) => {
+    for await (const event of client.event.subscribe({ signal }))
+      if (event.type === "plugin.updated" || event.type === "server.connected") relistPlugins()
+  }
+
   // Lists the plugins on the app's own server that ship a `./gui` bundle and reads each bundle there. A listing that
-  // fails keeps what main runs; a read that fails keeps that plugin's last bundle, or leaves a new plugin out until the
-  // next change.
+  // fails keeps what main runs.
   const listPlugins = async () => {
     sidecar.module ??= await loadClient()
     const client = sidecarClient()
@@ -362,38 +410,60 @@ export function createHost(input: {
 
     if (!listed) return
 
+    const shipped = listed.filter(shipsPluginGui)
+    const reserved = shipped.flatMap((plugin) => (pluginIdAvailable(plugin.id, definitions) ? [] : [plugin.id]))
+
     const read = await Promise.all(
-      listed
-        .filter(shipsPluginGui)
-        .filter((plugin) => pluginIdAvailable(plugin.id, definitions))
-        .map((plugin) =>
-          client.plugin.gui({ id: plugin.id }).then(
-            (result) => [plugin.id, result.data] as const,
-            () => [plugin.id, plugins.get(plugin.id)] as const,
-          ),
-        ),
+      shipped.filter((plugin) => !reserved.includes(plugin.id)).map((plugin) => readPlugin(client, plugin.id)),
     )
 
     if (status.disposed) return
-    applyPlugins(new Map(read.flatMap(([id, bundle]) => (bundle ? [[id, bundle] as const] : []))))
+    applyPlugins(new Map(read.flatMap((entry) => (entry ? [entry] : []))), reserved)
   }
 
-  // Starts, reloads and stops plugins' `main` setups to match a listing: a new bundle revision reloads its plugin.
-  const applyPlugins = (next: ReadonlyMap<string, PluginGuiBundle>) => {
+  // Reads a plugin's bundle and evaluates each new revision once. A read that fails keeps the bundle main runs, or
+  // leaves a new plugin out until the next change; a plugin limited to other systems is left out.
+  const readPlugin = async (client: OpenCodeClient, id: string) => {
+    const previous = plugins.get(id)
+
+    const bundle = await client.plugin.gui({ id }).then(
+      (result) => result.data,
+      () => undefined,
+    )
+
+    if (!bundle) return previous && ([id, previous] as const)
+
+    if (previous?.bundle.revision === bundle.revision) return [id, previous] as const
+
+    const loaded = await evaluateMain(bundle.code, id).then(
+      (value) => ({ ok: true as const, value }),
+      (cause: unknown) => ({ ok: false as const, cause }),
+    )
+
+    if (loaded.ok && !runsOn(loaded.value, os)) return undefined
+
+    return [id, { bundle, loaded }] as const
+  }
+
+  // Starts, reloads and stops plugins' `main` setups to match a listing, and sends windows the new set: a new bundle
+  // revision reloads its plugin.
+  const applyPlugins = (next: ReadonlyMap<string, ListedPlugin>, reserved: readonly string[]) => {
     const removed = [...plugins.keys()].filter((id) => !next.has(id))
 
-    const changes = [...next].flatMap(([id, bundle]) => {
+    const changes = [...next].flatMap(([id, plugin]) => {
       const previous = plugins.get(id)
 
-      if (previous?.revision === bundle.revision) return []
+      if (previous === plugin) return []
 
-      return [{ id, bundle, previous }]
+      return [{ id, plugin, previous }]
     })
 
-    if (removed.length === 0 && changes.length === 0) return
+    if (removed.length === 0 && changes.length === 0 && reserved.join("\n") === inventory.reserved.join("\n")) return
     removed.forEach((id) => plugins.delete(id))
-    changes.forEach((change) => plugins.set(change.id, change.bundle))
+    changes.forEach((change) => plugins.set(change.id, change.plugin))
+    inventory.reserved = reserved
     changed()
+    broadcast(new ExtensionPluginGuisChanged(pluginGuis()))
     removed.forEach((id) => void lifecycle.deactivate(id, () => lifecycle.forget(id)))
     changes.forEach((change) => {
       if (!change.previous) return void lifecycle.activate(change.id)
@@ -402,7 +472,7 @@ export function createHost(input: {
     })
   }
 
-  // One listing at a time; every window nudges on the same server event, so changes during a listing list once more.
+  // One listing at a time; a change during a listing lists once more.
   const relistPlugins = () => {
     if (status.listing) return void (status.relist = true)
     status.listing = true
@@ -416,6 +486,17 @@ export function createHost(input: {
         relistPlugins()
       })
   }
+
+  // What every window loads: the plugins main runs, and the ids a built-in claims.
+  const pluginGuis = () => ({
+    plugins: [...plugins].map(([id, plugin]) => ({
+      id,
+      revision: plugin.bundle.revision,
+      code: plugin.bundle.code,
+      options: plugin.bundle.options,
+    })),
+    reserved: inventory.reserved,
+  })
 
   const resolveMessages = async (catalog?: Catalog): Promise<Messages> => {
     const english = catalog?.en ?? {}
@@ -709,8 +790,13 @@ export function createHost(input: {
   )
 
   return {
-    /** Activates every enabled main extension. The app calls this once its first window is up. */
+    /**
+     * Activates every enabled main extension, then follows the app's own server for plugin GUIs. The app calls this once
+     * its first window is up.
+     */
     async start() {
+      inventory.stop ??= SidecarCredentials.onChange(() => void watchPlugins())
+      void watchPlugins()
       await Promise.all(local.map((definition) => lifecycle.activate(definition.id)))
     },
     /** Activates the declared provider ahead of `start`, falling back to the Ipc id's extension prefix. */
@@ -792,26 +878,24 @@ export function createHost(input: {
       await lifecycle.deactivate(id)
       changed()
     },
-    /** Reloads an extension. A reload that fails keeps the last good revision running. */
+    /**
+     * Reloads an extension. A reload that fails keeps the last good revision running. A plugin reruns the bundle main
+     * last read; a new bundle arrives through the listing.
+     */
     async reload(id: string) {
       if (!known(id)) throw new ExtensionError("notFound")
-      // A plugin's reload reads its bundle from the server again.
       await lifecycle.reload(id)
       changed()
     },
 
-    /**
-     * Lists the plugins on the app's own server again, after a window saw them change. Each one's `main` setup starts,
-     * reloads when its bundle's revision changes, and stops when the plugin is gone. A plugin cannot take an id a
-     * built-in claims.
-     */
-    pluginsChanged() {
-      relistPlugins()
-    },
+    /** The plugin GUIs main runs, which windows load; `ExtensionPluginGuisChanged` brings each change. */
+    pluginGuis,
 
     /** Disposes every main extension but one a restart handoff keeps; quitting awaits their async cleanups. */
     async dispose() {
       status.disposed = true
+      inventory.stop?.()
+      inventory.watch?.abort()
       stopWindows()
       stopLocale()
       // The menu is not rebuilt from here on (`publishMenubar`), so a kept extension's items stay in it.
@@ -820,7 +904,7 @@ export function createHost(input: {
   }
 }
 
-function read(entry: Entry) {
+function read(entry: Contribution) {
   return isGetter(entry.value) ? entry.value() : entry.value
 }
 

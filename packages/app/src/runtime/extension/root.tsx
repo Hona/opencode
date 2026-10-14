@@ -1,6 +1,5 @@
 import { batch, createMemo, createSignal, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
-import { extensionEnabled, type Bridge } from "@opencode/plugin/gui/host"
-import type { Definition } from "@opencode/plugin/gui"
+import { extensionEnabled, runsOn, type Bridge, type Entry } from "@opencode/plugin/gui/host"
 import { builtins } from "./builtins"
 import { createInstalled } from "./installed"
 import { PluginGuiLoader, type PluginGui } from "./plugins"
@@ -17,7 +16,7 @@ import { createContext, useContext } from "solid-js"
 
 const HostApisContext = createContext<HostApis>()
 
-// Desktop only: a window loads plugin GUIs from the app's own server and tells main when they change.
+// Desktop only: a window loads the plugin GUIs main sends.
 const PluginsContext = createContext<{
   bridge: Bridge
   set: (plugins: readonly PluginGui[], reserved: readonly string[]) => void
@@ -53,17 +52,15 @@ export function ExtensionRoot(props: ParentProps) {
 
   const os = platform.platform === "desktop" ? platform.os : undefined
 
-  const localBuiltins = builtins.filter(
-    (definition: Definition) => !definition.os || (!!os && definition.os.includes(os)),
-  )
+  const localBuiltins = builtins.filter((definition) => runsOn(definition, os))
 
   // The GUIs of the plugins on the app's own server, found once the app interface lists its servers.
   const [plugins, setPlugins] = createSignal<readonly PluginGui[]>([])
-  // Plugins whose GUI cannot load because a built-in claims the id; Settings > Plugins reports them.
+  // Plugins whose GUI cannot load because a built-in claims the id, as main reports them; Settings > Plugins shows them.
   const [reserved, setReserved] = createSignal<readonly string[]>([])
 
   // The same definitions in the same order are no change, so a refetch that found nothing new restarts nothing.
-  const definitions = createMemo<readonly Definition[]>(
+  const definitions = createMemo<readonly Entry[]>(
     () => [...localBuiltins, ...plugins().map((plugin) => plugin.definition)],
     [],
     {

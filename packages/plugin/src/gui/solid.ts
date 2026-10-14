@@ -1,6 +1,6 @@
 import { createComponent, createContext, useContext, type Accessor, type Component, type JSX } from "solid-js"
 import type { Context, SetupContext } from "./context.js"
-import type { Definition } from "./core.js"
+import type { Declarations } from "./declarations.js"
 
 /** The host provides this around every contribution it renders and in the plugin's setup. Read it with `usePlugin`. */
 export const PluginContext = createContext<Context>()
@@ -27,7 +27,7 @@ export const LifetimeContext = createContext<{
  * }
  * ```
  */
-export function usePlugin<D extends Definition = never>() {
+export function usePlugin<D extends Declarations = never>() {
   const context = useContext(PluginContext)
 
   if (!context) throw new Error("usePlugin must run inside a plugin contribution")

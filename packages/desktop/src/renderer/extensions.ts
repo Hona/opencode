@@ -25,6 +25,9 @@ export function createExtensionBridge(): Bridge {
         dispatch({ type: "available", ipc: event.ipc, available: event.available }),
       ),
       listen("ExtensionsChanged", (event) => dispatch({ type: "extensions", list: event.list })),
+      listen("ExtensionPluginGuisChanged", (event) =>
+        dispatch({ type: "pluginGuis", plugins: event.plugins, reserved: event.reserved }),
+      ),
       listen("ExtensionMenubarItemsChanged", (event) => {
         menubar.revision++
         dispatch({ type: "menubarItems", items: event.items })
@@ -62,7 +65,7 @@ export function createExtensionBridge(): Bridge {
     capture: (id) => invoke("ExtensionCapture", { id }).then((data) => data ?? undefined),
     runMenubarItem: (id) => send("ExtensionMenubarItem", { id }),
     configure: (servers) => send("ExtensionConfigure", { servers }),
-    pluginsChanged: () => send("ExtensionPluginsChanged"),
+    pluginGuis: () => invoke("ExtensionPluginGuis"),
     manager: {
       initial: window.electron.extensions,
       list: () => invoke("ExtensionList"),

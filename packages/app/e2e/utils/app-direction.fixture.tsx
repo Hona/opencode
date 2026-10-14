@@ -68,14 +68,14 @@ export function mount(input: { server: string; route: string; direction: Directi
 
   function Startup() {
     const host = useExtensionHost()
-    const definition = host.definitions().find((item) => item.renderer)
-    const load = definition?.renderer
+    const definition = host.definitions().find((item) => item.windowEntry)
+    const load = definition?.windowEntry
 
     // Hold a real extension through the public reload API before the startup gate first settles.
     if (input.held && definition && load)
       host.reload(definition.id, {
         ...definition,
-        renderer: async () => {
+        windowEntry: async () => {
           await held.promise
 
           return load()

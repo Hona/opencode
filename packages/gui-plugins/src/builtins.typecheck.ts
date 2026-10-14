@@ -2,7 +2,8 @@
 // renderer entry declares in `provides`, `uses` or `requires` needs a main entry that provides it: an unprovided Ipc in
 // `ctx.uses` stays pending forever, and an unprovided `requires` would also hold the window's startup gate. Each
 // `@ts-expect-error` fails the typecheck if its line stops being an error.
-import { Ipc, type IpcsProvided, type MissingMain, Plugin } from "@opencode/plugin/gui"
+import { Ipc, Plugin } from "@opencode/plugin/gui"
+import type { IpcsProvided, MissingMain } from "@opencode/plugin/gui/host"
 import type { builtins } from "./renderer"
 // Both compositions export `builtins`, and this file names the two together.
 import type { builtins as mainBuiltins } from "./main"
@@ -30,7 +31,7 @@ const Uses = Plugin.define({ id: "fixture", uses: { orphan: Orphan } })
 // @ts-expect-error no main entry provides fixture.orphan
 export const used: IpcsProvided<readonly [...typeof builtins, typeof Uses], typeof mainBuiltins> = true
 
-// A renderer that requires it, from an extension listed in main without the main entry that would provide it.
+// A renderer that requires it, from a plugin listed in main without the main entry that would provide it.
 const Provider = Plugin.define({ id: "fixture.provider", provides: { orphan: Orphan } })
 
 const Requires = Plugin.define({ id: "fixture.requires", requires: { orphan: Orphan } })

@@ -91,7 +91,7 @@ function fakeBridge() {
     capture: async () => undefined,
     runMenubarItem: () => {},
     configure: () => {},
-    pluginsChanged: () => {},
+    pluginGuis: async () => ({ plugins: [], reserved: [] }),
     manager: {
       list: async () => [],
       enable: async () => {},

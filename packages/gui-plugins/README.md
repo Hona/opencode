@@ -34,7 +34,7 @@ src/pairing/
 
 Unit tests of logic that carries a contract sit beside the code as `*.test.ts`, as in `src/ssh/` and `src/updater/`.
 
-`Plugin.define` is the manifest, the same call a third-party plugin's `./gui` makes. The host lists attach each built-in's lazy entries. The host reads the manifest before any entry loads.
+`Plugin.define` is the manifest, the same call a third-party plugin's `./gui` makes. The host lists attach each built-in's lazy `windowEntry` and `mainEntry`. The host reads the manifest before any entry loads.
 
 | Field      | What it declares                                                              | In the context                                    |
 | ---------- | ----------------------------------------------------------------------------- | ------------------------------------------------- |
@@ -667,11 +667,11 @@ export const builtins = compose(
   file,
   review,
   details,
-  { ...browser, main: () => import("./browser/main") },
-  { ...pairing, main: () => import("./pairing/main") },
-  { ...updater, main: () => import("./updater/main") },
-  { ...ssh, main: () => import("./ssh/main") },
-  { ...wsl, main: () => import("./wsl/main") },
+  { ...browser, mainEntry: () => import("./browser/main") },
+  { ...pairing, mainEntry: () => import("./pairing/main") },
+  { ...updater, mainEntry: () => import("./updater/main") },
+  { ...ssh, mainEntry: () => import("./ssh/main") },
+  { ...wsl, mainEntry: () => import("./wsl/main") },
   microsoftOffice,
 )
 ```
@@ -682,23 +682,23 @@ The window list adds each window entry, loaded with the app:
 
 ```ts
 /**
- * Built-in plugins with their renderer entries. The only place host builds name built-ins. `builtins.typecheck.ts`
+ * Built-in plugins with their window entries. The only place host builds name built-ins. `builtins.typecheck.ts`
  * checks this composition against the main one.
  */
 export const builtins = compose(
-  { ...context, renderer: eager(contextRenderer) },
-  { ...btw, renderer: eager(btwRenderer) },
-  { ...debug, renderer: eager(debugRenderer) },
-  { ...terminal, renderer: eager(terminalRenderer) },
-  { ...file, renderer: eager(fileRenderer) },
-  { ...review, renderer: eager(reviewRenderer) },
-  { ...details, renderer: eager(detailsRenderer) },
-  { ...browser, renderer: eager(browserRenderer) },
-  { ...pairing, renderer: eager(pairingRenderer) },
-  { ...updater, renderer: eager(updaterRenderer) },
-  { ...ssh, renderer: eager(sshRenderer) },
-  { ...wsl, renderer: eager(wslRenderer) },
-  { ...microsoftOffice, renderer: eager(microsoftOfficeRenderer) },
+  { ...context, windowEntry: eager(contextRenderer) },
+  { ...btw, windowEntry: eager(btwRenderer) },
+  { ...debug, windowEntry: eager(debugRenderer) },
+  { ...terminal, windowEntry: eager(terminalRenderer) },
+  { ...file, windowEntry: eager(fileRenderer) },
+  { ...review, windowEntry: eager(reviewRenderer) },
+  { ...details, windowEntry: eager(detailsRenderer) },
+  { ...browser, windowEntry: eager(browserRenderer) },
+  { ...pairing, windowEntry: eager(pairingRenderer) },
+  { ...updater, windowEntry: eager(updaterRenderer) },
+  { ...ssh, windowEntry: eager(sshRenderer) },
+  { ...wsl, windowEntry: eager(wslRenderer) },
+  { ...microsoftOffice, windowEntry: eager(microsoftOfficeRenderer) },
 )
 ```
 

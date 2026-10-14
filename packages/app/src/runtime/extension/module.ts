@@ -1,5 +1,10 @@
-import type { Definition } from "@opencode/plugin/gui"
-import { evaluatePluginBundle, inertModule, mainOnlyModule, type PluginModule } from "@opencode/plugin/gui/host"
+import {
+  evaluatePluginBundle,
+  inertModule,
+  mainOnlyModule,
+  type PluginModule,
+  type Entry,
+} from "@opencode/plugin/gui/host"
 
 // Plugin bundles share the host's module instances, so tokens, contexts and schemas they import are the same objects
 // the host checks against. In a window, the main SDK's name resolves to the window SDK.
@@ -28,7 +33,7 @@ const modules = {
  * that fails to evaluate, or declares another id, becomes a definition whose entry fails, so Settings > Plugins reports
  * it.
  */
-export async function pluginDefinition(id: string, code: string): Promise<Definition> {
+export async function pluginDefinition(id: string, code: string): Promise<Entry> {
   const loaded = new Map<string, object>(
     await Promise.all(Object.entries(modules).map(async ([name, load]) => [name, await load()] as const)),
   )
@@ -52,10 +57,10 @@ export async function pluginDefinition(id: string, code: string): Promise<Defini
     (cause: unknown) => ({ ok: false as const, cause }),
   )
 
-  if (!bundle.ok) return { id, renderer: () => Promise.reject(bundle.cause) }
+  if (!bundle.ok) return { id, windowEntry: () => Promise.reject(bundle.cause) }
 
   const setup = bundle.value.setup
 
   // A setup's returned cleanup reaches the host, which runs it when the plugin goes away.
-  return { ...bundle.value.definition, renderer: async () => ({ default: (ctx: never) => setup?.(ctx) }) }
+  return { ...bundle.value.definition, windowEntry: async () => ({ default: (ctx: never) => setup?.(ctx) }) }
 }

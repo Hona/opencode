@@ -10,7 +10,7 @@ import type { Accessor } from "solid-js"
 export type Cleanup = () => void | Promise<void>
 
 /**
- * An operating system, as `Definition.os` and `Desktop.os` name it.
+ * An operating system, as `Plugin.Declarations.os` and `Desktop.os` name it.
  * - `macos`: macOS.
  * - `windows`: Windows.
  * - `linux`: Linux and every other desktop platform.
@@ -44,13 +44,6 @@ export type Catalog = {
       }>)
 }
 
-/**
- * What a main entry's setup returns: optionally a cleanup, or a promise of one, which runs when the instance goes away,
- * as a server or TUI plugin's returned cleanup does. `ctx.scope.addFinalizer` and `ctx.scope.signal` also work. Window
- * setup is synchronous and may return only a cleanup.
- */
-type Result = Cleanup | void | Promise<Cleanup | void>
-
 /** A JSON value, as plugin options in `opencode.json` hold. */
 export type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json }
 
@@ -82,61 +75,6 @@ export interface App {
   readonly platform: "web" | "desktop"
   /** A packaged desktop app, not a development run. Always false on the web. */
   readonly packaged: boolean
-}
-
-/**
- * A plugin as the host runs it: its `Plugin.define` declarations, plus the lazily loaded entries the host attaches
- * (`renderer`, `main`). The host reads it before any entry loads.
- */
-export interface Definition {
-  /**
-   * The plugin's id and the prefix of every id it creates: commands (`<id>.<command>`), panel keys (`<id>:<tab>`),
-   * stored keys (`extension.<id>.<key>`), and its contract and Ipc ids (`<id>` or `<id>.<name>`). Changing it moves
-   * all of those; migrate them as the guide describes.
-   */
-  readonly id: string
-  /**
-   * The operating systems the plugin runs on. Omit it to run everywhere, the web included. A plugin that lists
-   * any OS does not run on the web, where no OS is known.
-   */
-  readonly os?: readonly OS[]
-  /** The plugin's copy. `ctx.t` reads it first, then the app's shared keys such as `common.*`. */
-  readonly i18n?: Catalog
-  /**
-   * Tokens this plugin provides: Contracts from its window entry (`ctx.provide`), Ipcs from its main entry.
-   * `compose` refuses two providers of one token. The window entry also reads each one as `ctx.uses.<key>`,
-   * a `Live` accessor, so a plugin that talks to its own main entry lists that Ipc here only.
-   */
-  readonly provides?: Tokens
-  /**
-   * Optional dependencies that other plugins provide. Each is a `Live` accessor in `ctx.uses`: pending while its
-   * provider loads, inactive while it is disabled, failed, blocked or restarting. The plugin must keep working while one is
-   * inactive. Your own tokens need no entry: `provides` already puts them in `ctx.uses`. A key that names one token in
-   * `provides` and another here fails to compile (`Conflict<"key">`).
-   */
-  readonly uses?: Tokens
-  /**
-   * Hard dependencies. The host starts the plugin only while every one is active and restarts it with them; the
-   * values are plain in `ctx.requires`. Use it only where the plugin is meaningless without the contract. A
-   * reference (`Ipc.ref`) is refused: it resolves only once code loads the full token, which setup would do.
-   */
-  readonly requires?: Readonly<Record<string, Contract<unknown> | Ipc>>
-  /**
-   * State the host stores for the plugin, by store name. Each process's `ctx.stores` holds only its own:
-   * `Store.global` and `Store.session` are window state, loaded before they are read; `Store.main` is main-process
-   * state, always loaded. See `Store`. Keys known only at runtime go through `ctx.storage.store`.
-   */
-  readonly stores?: Readonly<Record<string, StoreDeclaration | MainStoreDeclaration>>
-  /** The window entry, loaded lazily; its default export is a window setup (`Plugin.Setup<typeof definition>`). */
-  readonly renderer?: () => Promise<{
-    /** The window setup. */
-    readonly default: (ctx: never) => void
-  }>
-  /** The main entry, loaded lazily; its default export is a main setup (`Plugin.MainSetup<typeof definition>`). */
-  readonly main?: () => Promise<{
-    /** The main setup. */
-    readonly default: (ctx: never) => Result
-  }>
 }
 
 declare const brand: unique symbol
@@ -480,7 +418,7 @@ export interface BaseContext {
    */
   readonly client: OpenCodeClient | undefined
   /**
-   * The plugin's id, `Definition.id`.
+   * The plugin's id, as its `Plugin.define` declares it.
    *
    * @example
    * ```ts
@@ -776,30 +714,6 @@ export type TokenId<T> =
         ? Id
         : never
 
-/** `compose`'s error: a `requires` token that no plugin in the composition provides. */
-export interface Missing<Id extends string> {
-  /** The token's id. */
-  readonly [problem]: Id
-}
-
-/** `compose`'s error: a token that two plugins in the composition provide. */
-export interface Duplicate<Id extends string> {
-  /** The token's id. */
-  readonly [problem]: Id
-}
-
-/** `compose`'s error: two definitions use the same plugin id. */
-export interface DuplicatePluginId<Id extends string> {
-  /** The repeated plugin id. */
-  readonly [problem]: Id
-}
-
-/** `IpcsProvided`'s error: a window `provides`, `uses` or `requires` of an Ipc that no main entry provides. */
-export interface MissingMain<Id extends string> {
-  /** The Ipc's id. */
-  readonly [problem]: Id
-}
-
 /** `Plugin.define`'s error: a key that names one token in `provides` and another in `uses`. */
 export interface Conflict<Key extends string> {
   /** The key both records use. */
@@ -827,73 +741,6 @@ export type DefinitionCheck<D> = [ConflictingKeys<D>] extends [never]
  * that names two different tokens, so the merge never hides one.
  */
 export type Usable<D> = Omit<Declared<D, "provides">, keyof Declared<D, "uses">> & Declared<D, "uses">
-
-type Literal<Id> = Id extends string ? (string extends Id ? never : Id) : never
-
-// Distributes over a union of definitions, so each contributes its own declared ids.
-type Ids<D, K extends "provides" | "uses" | "requires"> = D extends unknown
-  ? TokenId<Declared<D, K>[keyof Declared<D, K>]>
-  : never
-
-type Others<Ds extends readonly unknown[], I> = { [J in keyof Ds]: J extends I ? never : Ds[J] }[number]
-
-type MissingIds<Ds extends readonly unknown[]> = Exclude<Ids<Ds[number], "requires">, Ids<Ds[number], "provides">>
-
-type DuplicateIds<Ds extends readonly unknown[]> = {
-  [I in keyof Ds]: Literal<Ids<Ds[I], "provides">> & Ids<Others<Ds, I>, "provides">
-}[number]
-
-type DefinitionId<D> = D extends { readonly id: infer Id } ? Literal<Id> : never
-
-type RepeatedIds<Ds extends readonly unknown[]> = {
-  [I in keyof Ds]: DefinitionId<Ds[I]> & DefinitionId<Others<Ds, I>>
-}[number]
-
-/** Compile errors for a composition; `unknown` when it is valid. */
-export type Composition<Ds extends readonly unknown[]> = [RepeatedIds<Ds>] extends [never]
-  ? ProvidersCheck<Ds>
-  : {
-      /** Two definitions share this plugin id. */
-      readonly "duplicate plugin id": DuplicatePluginId<RepeatedIds<Ds>>
-    }
-
-type ProvidersCheck<Ds extends readonly unknown[]> = [MissingIds<Ds>] extends [never]
-  ? [DuplicateIds<Ds>] extends [never]
-    ? unknown
-    : {
-        /** Two plugins provide this token. */
-        readonly "duplicate provider": Duplicate<DuplicateIds<Ds>>
-      }
-  : {
-      /** No plugin provides this `requires` token. */
-      readonly "missing provider": Missing<MissingIds<Ds>>
-    }
-
-type IpcIds<D, K extends "provides" | "uses" | "requires"> = D extends unknown
-  ? TokenId<Extract<Declared<D, K>[keyof Declared<D, K>], Ipc | IpcRef>>
-  : never
-
-// A window reads its own `provides` through `ctx.uses` too, so those Ipcs need a main entry as well.
-type MissingIpcs<R extends readonly unknown[], M extends readonly unknown[]> = Exclude<
-  IpcIds<R[number], "provides"> | IpcIds<R[number], "uses"> | IpcIds<R[number], "requires">,
-  IpcIds<Extract<M[number], { readonly main: unknown }>, "provides">
->
-
-/**
- * `true` when every Ipc the window composition `R` declares in `provides`, `uses` or `requires` is provided by an entry
- * with a main module in the main composition `M`; otherwise an error type naming the Ipc. Check it once in a file that
- * imports both compositions.
- *
- * @example
- * ```ts
- * export const ipcs: IpcsProvided<typeof renderer, typeof main> = true
- * ```
- */
-export type IpcsProvided<R extends readonly unknown[], M extends readonly unknown[]> = [MissingIpcs<R, M>] extends [
-  never,
-]
-  ? true
-  : MissingMain<MissingIpcs<R, M>>
 
 /**
  * Defines registries.

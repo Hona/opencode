@@ -1,7 +1,15 @@
 // Type-level contract of typed composition, checked by `bun typecheck`. Nothing imports this file. Each
 // `@ts-expect-error` fails the typecheck if its line stops being an error.
 import { Plugin } from "./index.js"
-import { compose } from "./host.js"
+import {
+  compose,
+  type Composition,
+  type Duplicate,
+  type DuplicatePluginId,
+  type IpcsProvided,
+  type Missing,
+  type MissingMain,
+} from "./host.js"
 import type { Accessor } from "solid-js"
 import { Schema } from "effect"
 import {
@@ -9,17 +17,11 @@ import {
   Ipc,
   Contract,
   Store,
-  type Composition,
   type Conflict,
   type DefinitionCheck,
   type Desktop,
-  type Duplicate,
-  type DuplicatePluginId,
   type IpcClient,
   type Live,
-  type Missing,
-  type MissingMain,
-  type IpcsProvided,
   type SessionScreen,
   type MountedSession,
   type Panel,
@@ -89,8 +91,8 @@ equal<
   { readonly "duplicate provider": Duplicate<"fixture.tree"> }
 >(true)
 
-// A renderer Ipc needs an entry with a main module that provides it in the main composition.
-export const main = compose({ ...PaneProvider, main: async () => ({ default: () => undefined }) })
+// A window Ipc needs an entry with a main setup that provides it in the main composition.
+export const main = compose({ ...PaneProvider, mainEntry: async () => ({ default: () => undefined }) })
 
 export const ipcs: IpcsProvided<typeof renderer, typeof main> = true
 

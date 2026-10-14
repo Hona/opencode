@@ -46,14 +46,7 @@ export const extensionHandlers = ExtensionRpcs.toLayer(
         Effect.sync(() => extensions.loaded()?.runMenubarItem(caller(context), id)),
       ExtensionMenubarItems: () => Effect.sync(() => extensions.loaded()?.listMenubarItems() ?? []),
       ExtensionConfigure: ({ servers }, context) => Effect.sync(() => extensions.configure(caller(context), servers)),
-      ExtensionPluginsChanged: (_, context) =>
-        Effect.sync(() => {
-          caller(context)
-          void extensions.host().then(
-            (host) => host.pluginsChanged(),
-            () => undefined,
-          )
-        }),
+      ExtensionPluginGuis: () => Effect.promise(() => extensions.host().then((host) => host.pluginGuis())),
       ExtensionList: () => Effect.promise(() => extensions.host().then((host) => host.list())),
       ExtensionEnable: ({ id }) => manage((host) => host.enable(id)),
       ExtensionDisable: ({ id }) => manage((host) => host.disable(id)),

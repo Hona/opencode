@@ -66,6 +66,20 @@ export const ExtensionInstalled = Schema.Struct({
 
 export type ExtensionInstalled = typeof ExtensionInstalled.Type
 
+export const ExtensionPluginGuis = Schema.Struct({
+  plugins: Schema.Array(
+    Schema.Struct({
+      id,
+      revision: text(256),
+      code: Schema.String,
+      options: Schema.Record(Schema.String, Schema.Json),
+    }),
+  ),
+  reserved: Schema.Array(id),
+})
+
+export type ExtensionPluginGuis = typeof ExtensionPluginGuis.Type
+
 export const ExtensionMenubarItem = Schema.Struct({
   menu: Schema.String,
   id: Schema.String,
@@ -91,8 +105,8 @@ export const ExtensionRpcs = RpcGroup.make(
   Rpc.make("ExtensionMenubarItem", { payload: { id } }),
   Rpc.make("ExtensionMenubarItems", { success: Schema.Array(ExtensionMenubarItem) }),
   Rpc.make("ExtensionConfigure", { payload: { servers: Schema.Array(ExtensionEndpoint) } }),
-  // Plugins on the app's own server changed; main lists them from that server itself.
-  Rpc.make("ExtensionPluginsChanged"),
+  // The plugin GUIs main lists from the app's own server; `ExtensionPluginGuisChanged` brings each change.
+  Rpc.make("ExtensionPluginGuis", { success: ExtensionPluginGuis }),
   Rpc.make("ExtensionList", { success: Schema.Array(ExtensionInstalled) }),
   Rpc.make("ExtensionEnable", { payload: { id }, error: ExtensionFailure }),
   Rpc.make("ExtensionDisable", { payload: { id }, error: ExtensionFailure }),

@@ -1,4 +1,5 @@
 import { createResource, onCleanup, type JSX } from "solid-js"
+import type { Entry } from "@opencode/plugin/gui/host"
 import { pluralCategory } from "@opencode/ui/context/i18n"
 import { useLanguage } from "@/runtime/i18n/language"
 import {
@@ -7,7 +8,6 @@ import {
   type Appearance,
   type Catalog,
   type Context,
-  type Definition,
   type Keybinds,
   type Locale,
   type Messages,
@@ -17,7 +17,7 @@ import {
   type Workspaces,
 } from "../../plugin/src/gui/index"
 
-const definitions = import.meta.glob<Definition>("../../gui-plugins/src/*/index.ts", { eager: true, import: "default" })
+const definitions = import.meta.glob<Entry>("../../gui-plugins/src/*/index.ts", { eager: true, import: "default" })
 const styles = import.meta.glob<string>("../../gui-plugins/src/*/*.css", {
   eager: true,
   query: "?inline",
@@ -45,7 +45,7 @@ export function ExtensionStory(props: { file: unknown; children: JSX.Element }) 
   return <PluginContext.Provider value={createStoryContext(definition)}>{props.children}</PluginContext.Provider>
 }
 
-function createStoryContext(definition: Definition) {
+function createStoryContext(definition: Entry) {
   const language = useLanguage()
   const [catalog] = createResource(language.locale, (locale) => loadMessages(definition.i18n, locale), {
     initialValue: definition.i18n?.en ?? {},

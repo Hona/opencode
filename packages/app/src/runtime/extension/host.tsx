@@ -20,6 +20,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
+import type { Entry } from "@opencode/plugin/gui/host"
 import { Predicate } from "effect"
 import { resolveTemplate } from "@solid-primitives/i18n"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -34,7 +35,6 @@ import {
   type Cleanup,
   type Context,
   type Contract,
-  type Definition,
   type Dialogs,
   type Link,
   type Links,
@@ -54,15 +54,15 @@ import type { OpenCodeClient } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import { createSessionStore, whenLoaded } from "./stores"
 
-type Entry = { key: string; registry: string; extension: string; value: Accessor<unknown> }
+type Contribution = { key: string; registry: string; extension: string; value: Accessor<unknown> }
 
 export type Item<T> = { readonly key: string; readonly extension: string; readonly value: T }
 
 /** The context the host builds: every `Setup<D>` of the definition receives it, and contributions read it as `Context`. */
-type InstanceContext = SetupContext<Definition> & Context
+type InstanceContext = SetupContext<Entry> & Context
 
 type Instance = {
-  definition: Definition
+  definition: Entry
   context: InstanceContext
   dispose: () => void
   /** Runs `fn` when the instance goes away, as a cleanup a setup returns. */
@@ -106,7 +106,7 @@ type Absent = Exclude<Live<never>, { readonly status: "active" }>
 type Provider = Absent | { readonly status: "active"; readonly generation: number }
 
 type HostState = {
-  entries: Record<string, Entry[] | undefined>
+  entries: Record<string, Contribution[] | undefined>
   contracts: Record<string, number | undefined>
   status: Record<string, ExtensionStatus | undefined>
   failures: Record<string, ExtensionFailure | undefined>
@@ -134,7 +134,7 @@ export function useExtensionHost() {
 }
 
 type HostInput = {
-  definitions: Accessor<readonly Definition[]>
+  definitions: Accessor<readonly Entry[]>
   disabled: Accessor<ReadonlySet<string> | undefined>
   apis: HostApiFactories
   /**
@@ -259,7 +259,7 @@ function createHost(input: HostInput) {
     return active
   }
 
-  const satisfied = (definition: Definition) =>
+  const satisfied = (definition: Entry) =>
     Object.values(definition.requires ?? {}).every((token) => untrack(() => providerState(token)).status === "active")
 
   // Reuses each item object while its value is unchanged so keyed renders do not remount.
@@ -401,8 +401,8 @@ function createHost(input: HostInput) {
     }),
   } satisfies { readonly [K in keyof HostApis]: HostApiFactory<HostApis[K]> }
 
-  const activate = async (definition: Definition) => {
-    const load = definition.renderer
+  const activate = async (definition: Entry) => {
+    const load = definition.windowEntry
 
     // A disabled extension, e.g. one reloaded from settings, stays disabled: marking it loading would make the
     // enable watcher skip it later. Before the list loads nothing activates; the watcher starts each entry then.
@@ -505,12 +505,7 @@ function createHost(input: HostInput) {
     )
   }
 
-  const createInstance = (
-    definition: Definition,
-    dispose: () => void,
-    root: Owner | null,
-    initial: Messages,
-  ): Instance => {
+  const createInstance = (definition: Entry, dispose: () => void, root: Owner | null, initial: Messages): Instance => {
     const extension = definition.id
     const controller = new AbortController()
     const cleanups = new Set<Cleanup>()
@@ -814,8 +809,8 @@ function createHost(input: HostInput) {
     })
   }
 
-  const replaced = new Map<string, Definition>()
-  const latest = (definition: Definition) => replaced.get(definition.id) ?? definition
+  const replaced = new Map<string, Entry>()
+  const latest = (definition: Entry) => replaced.get(definition.id) ?? definition
 
   // The definitions the host starts with: the built-ins. Definitions that join later (plugins) never hold the gate.
   const initial = new Set(untrack(all))
@@ -827,7 +822,7 @@ function createHost(input: HostInput) {
       settled ||
       (!!input.disabled() &&
         [...initial].every((definition) => {
-          if (!definition.renderer) return true
+          if (!definition.windowEntry) return true
 
           const status = state.status[definition.id]
 
@@ -844,7 +839,7 @@ function createHost(input: HostInput) {
 
   // `requires` gating: an extension starts once every hard contract is active and restarts with a new generation of
   // any of them. Activation is never ordered by the graph; only these extensions wait, and only for their contracts.
-  const watchRequires = (definition: Definition) => {
+  const watchRequires = (definition: Entry) => {
     const tokens = Object.values(definition.requires ?? {})
 
     if (tokens.length === 0) return
@@ -883,9 +878,9 @@ function createHost(input: HostInput) {
   initial.forEach(watchRequires)
 
   // Definitions that join later (plugins) watch in their own roots, which end with the definition.
-  const watchers = new Map<Definition, () => void>()
+  const watchers = new Map<Entry, () => void>()
   // The definition object each id was last listed with; a new object for a listed id replaces it.
-  const listed = new Map<string, Definition>()
+  const listed = new Map<string, Entry>()
 
   // Forgets everything about an extension whose definition left or was replaced, so the next pass starts it afresh.
   const forget = (id: string) => {
@@ -969,7 +964,7 @@ function createHost(input: HostInput) {
       instances.forEach((instance) => instance.preload(session))
     },
     /** `next` replaces the definition, e.g. after a development hot update. */
-    reload(id: string, next?: Definition) {
+    reload(id: string, next?: Entry) {
       const definition = next ?? untrack(all).find((item) => item.id === id)
 
       if (!definition) return
@@ -986,7 +981,7 @@ function createHost(input: HostInput) {
 }
 
 /** The window's declared stores; a `Store.main` store belongs to the main process. */
-function windowStores(definition: Definition) {
+function windowStores(definition: Entry) {
   return Object.entries(definition.stores ?? {}).flatMap(([name, declaration]) =>
     declaration.scope === "main" ? [] : [[name, declaration] as const],
   )

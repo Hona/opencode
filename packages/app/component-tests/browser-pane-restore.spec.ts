@@ -63,8 +63,8 @@ story.beforeEach(async ({ mount, page }) => {
       useExtensionHost: host.useExtensionHost,
       createRegion: panels.createRegion,
       definitions: [
-        { ...browser.default, renderer: () => import(modules.browserRenderer) },
-        { ...file.default, renderer: () => import(modules.fileRenderer) },
+        { ...browser.default, windowEntry: () => import(modules.browserRenderer) },
+        { ...file.default, windowEntry: () => import(modules.fileRenderer) },
       ],
       Shell: (props: ParentProps) =>
         solid.createComponent(platform.PlatformProvider, {

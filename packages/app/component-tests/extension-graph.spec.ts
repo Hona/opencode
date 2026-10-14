@@ -1,5 +1,5 @@
-import type { Definition } from "@opencode/plugin/gui"
 import { expect, sourceURL, story } from "../../storybook/playwright/story"
+import type { Entry } from "@opencode/plugin/gui/host"
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
@@ -23,9 +23,9 @@ story("built-ins: no requires cycle, and each consumer activates without each op
     ])
 
     // The window this host serves has no OS, so OS-specific built-ins are left out as the app leaves them out.
-    const composition: readonly Definition[] = builtins
+    const composition: readonly Entry[] = builtins
     const definitions = composition.filter((definition) => !definition.os)
-    const ids = (tokens: Definition["provides"]) => Object.values(tokens ?? {}).map((token) => token.id)
+    const ids = (tokens: Entry["provides"]) => Object.values(tokens ?? {}).map((token) => token.id)
     const providerOf = (token: string) => definitions.find((definition) => ids(definition.provides).includes(token))?.id
 
     const requires = new Map(

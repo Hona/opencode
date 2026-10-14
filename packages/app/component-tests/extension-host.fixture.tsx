@@ -3,7 +3,6 @@ import {
   Panel,
   type Appearance,
   type App,
-  type Definition,
   type Keybinds,
   type Layout,
   type Locale,
@@ -35,7 +34,7 @@ import { ServerScope } from "@/runtime/server/scope"
 import { ExtensionHostProvider, useExtensionHost, type HostApiFactories } from "../src/runtime/extension/host"
 import { createHostApis } from "../src/runtime/extension/host-apis"
 import { createInstalled } from "../src/runtime/extension/installed"
-import { extensionEnabled } from "@opencode/plugin/gui/host"
+import { extensionEnabled, type Entry } from "@opencode/plugin/gui/host"
 import { createRegion, RegionContent } from "../src/runtime/extension/panels"
 import { ExtensionSlot } from "../src/runtime/extension/render"
 import { persistedHandle } from "../src/runtime/extension/stores"
@@ -133,7 +132,7 @@ export async function until(check: () => boolean) {
 
 /** Mounts the real extension host with one extension whose every renderer load settles when the test says so. */
 export function mountExtensionHost() {
-  const loads: PromiseWithResolvers<{ default: Setup<Definition> }>[] = []
+  const loads: PromiseWithResolvers<{ default: Setup<Entry> }>[] = []
   const [disabled, setDisabled] = createSignal<ReadonlySet<string>>(new Set())
   const hosts: ExtensionHost[] = []
   const container = document.createElement("div")
@@ -153,8 +152,8 @@ export function mountExtensionHost() {
             definitions={() => [
               {
                 id: "fixture",
-                renderer: () => {
-                  const load = Promise.withResolvers<{ default: Setup<Definition> }>()
+                windowEntry: () => {
+                  const load = Promise.withResolvers<{ default: Setup<Entry> }>()
                   loads.push(load)
 
                   return load.promise
@@ -179,7 +178,7 @@ export function mountExtensionHost() {
       container.remove()
     },
     /** Resolves the nth renderer load (the first by default) with this setup. */
-    load: (setup: Setup<Definition>, index = 0) => loads[index].resolve({ default: setup }),
+    load: (setup: Setup<Entry>, index = 0) => loads[index].resolve({ default: setup }),
     /** Rejects the nth renderer load. */
     fail: (index: number, cause: unknown) => loads[index].reject(cause),
     /** Renderer loads requested so far. */
@@ -199,7 +198,7 @@ export function mountExtensionHost() {
  * it. Renders the `window.bottom` slot once the startup gate opens.
  */
 export function mountExtensions(input: {
-  definitions: readonly Definition[]
+  definitions: readonly Entry[]
   disabled?: readonly string[]
   bridge?: Parameters<typeof createInstalled>[0]
   stored?: Readonly<Record<string, Json>>
@@ -307,7 +306,7 @@ export function mountExtensions(input: {
     release: () => held.resolve(),
     disable: (ids: readonly string[]) => setDisabled(new Set(ids)),
     /** Replaces the definitions, as plugin GUIs join, reload and leave. */
-    define: (next: readonly Definition[]) => setDefinitions(next),
+    define: (next: readonly Entry[]) => setDefinitions(next),
     reload: (id: string) => hosts[0]?.reload(id),
     ready: () => hosts[0]?.ready() ?? false,
     status: (id: string) => hosts[0]?.state.status[id],
@@ -357,7 +356,7 @@ function standIn(overrides: Partial<Interface>): Interface {
 }
 
 /** The real host over the real HostApis of a web window; `mounted`, when given, attaches as the app interface. */
-function RealHost(props: ParentProps<{ definitions: readonly Definition[]; captured: Captured; mounted?: Interface }>) {
+function RealHost(props: ParentProps<{ definitions: readonly Entry[]; captured: Captured; mounted?: Interface }>) {
   const apis = createHostApis()
   props.captured.apis = apis
 
@@ -382,7 +381,7 @@ function RealHost(props: ParentProps<{ definitions: readonly Definition[]; captu
  * does: a new session object each time, delivered through the same reactive inputs, while the one screen object
  * `ctx.screen` returns follows the route. Its composer records which session each attachment reached.
  */
-export function mountSessionRegion(input: { definitions: readonly Definition[]; active: string }) {
+export function mountSessionRegion(input: { definitions: readonly Entry[]; active: string }) {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const hosts: ExtensionHost[] = []
@@ -498,7 +497,7 @@ export function mountSessionRegion(input: { definitions: readonly Definition[]; 
  * stand-in for the interface: its layout records each write and reports a tab it opened as visible, its server is
  * the local one, and its mono font is "fixture mono".
  */
-export function mountHostApis(input: { definitions: readonly Definition[] }) {
+export function mountHostApis(input: { definitions: readonly Entry[] }) {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const writes: string[] = []

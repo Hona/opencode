@@ -22,7 +22,7 @@ test("a list main pushes while the initial list is pending wins over the older r
     capture: async () => undefined,
     runMenubarItem: () => {},
     configure: () => {},
-    pluginsChanged: () => {},
+    pluginGuis: async () => ({ plugins: [], reserved: [] }),
     manager: {
       list: () => reply.promise,
       enable: async () => {},
