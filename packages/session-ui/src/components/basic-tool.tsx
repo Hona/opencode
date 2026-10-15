@@ -11,7 +11,6 @@ import {
   type Accessor,
   type JSX,
 } from "solid-js"
-import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "@opencode/ui/collapsible"
@@ -51,7 +50,6 @@ export interface BasicToolProps {
   allowOpenWhilePending?: boolean
   defer?: boolean
   locked?: boolean
-  animated?: boolean
   rail?: boolean
   onSubtitleClick?: () => void
   onTriggerClick?: JSX.EventHandlerUnion<HTMLElement, MouseEvent>
@@ -61,8 +59,6 @@ export interface BasicToolProps {
   clickable?: boolean
   compact?: boolean
 }
-
-const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
 
 const deferredMounts: Array<{ active: boolean; fn: () => void }> = []
 
@@ -184,39 +180,6 @@ export function BasicTool(props: BasicToolProps) {
       { defer: true },
     ),
   )
-
-  // Animated height for collapsible open/close
-  let contentRef: HTMLDivElement | undefined
-  let heightAnim: AnimationPlaybackControls | undefined
-  const initialOpen = open()
-
-  createEffect(
-    on(
-      open,
-      (isOpen) => {
-        if (!props.animated || !contentRef) return
-        heightAnim?.stop()
-
-        if (isOpen) {
-          contentRef.style.overflow = "hidden"
-          heightAnim = animate(contentRef, { height: "auto" }, SPRING)
-          void heightAnim.finished.then(() => {
-            if (!contentRef || !open()) return
-            contentRef.style.overflow = "visible"
-            contentRef.style.height = "auto"
-          })
-        } else {
-          contentRef.style.overflow = "hidden"
-          heightAnim = animate(contentRef, { height: "0px" }, SPRING)
-        }
-      },
-      { defer: true },
-    ),
-  )
-
-  onCleanup(() => {
-    heightAnim?.stop()
-  })
 
   const handleOpenChange = (value: boolean) => {
     if (pending() && !props.allowOpenWhilePending) return
@@ -340,20 +303,7 @@ export function BasicTool(props: BasicToolProps) {
           {trigger()}
         </Collapsible.Trigger>
       </Show>
-      <Show when={props.animated && hasChildren() && !props.hideDetails}>
-        <div
-          ref={contentRef}
-          data-slot="collapsible-content"
-          data-animated
-          style={{
-            height: initialOpen ? "auto" : "0px",
-            overflow: initialOpen ? "visible" : "hidden",
-          }}
-        >
-          <Show when={!props.defer || ready()}>{props.children}</Show>
-        </div>
-      </Show>
-      <Show when={!props.animated && hasChildren() && !props.hideDetails}>
+      <Show when={hasChildren() && !props.hideDetails}>
         <Show
           when={props.locked && open() && !props.defer}
           fallback={

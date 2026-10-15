@@ -7,7 +7,6 @@
 @import "katex/dist/katex.min.css" layer(base);
 
 @import "../data-display/accordion/accordion.css" layer(components);
-@import "../components/animated-number.css" layer(components);
 @import "../components/app-icon.css" layer(components);
 @import "../components/card.css" layer(components);
 @import "../forms/checkbox/checkbox.css" layer(components);
@@ -30,7 +29,6 @@
 @import "../components/sticky-accordion-header.css" layer(components);
 @import "../navigation/tabs/tabs.css" layer(components);
 @import "../components/text-reveal.css" layer(components);
-@import "../components/text-strikethrough.css" layer(components);
 @import "../components/typewriter.css" layer(components);
 
 @import "./utilities.css" layer(utilities);

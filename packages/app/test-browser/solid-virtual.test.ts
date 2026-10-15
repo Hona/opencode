@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import { createVirtualizer, defaultRangeExtractor, Virtualizer } from "@tanstack/solid-virtual"
 import { createRoot, createSignal } from "solid-js"
-import { filterVirtualIndexes } from "@/session/timeline/virtual-items"
 
 test("end anchoring survives consecutive resizes when the first scroll write is clamped", () => {
   const writes: { offset: number; adjustments?: number }[] = []
@@ -196,7 +195,7 @@ test("stale pinned indexes do not produce missing virtual items after count shri
       estimateSize: () => 60,
       initialRect: { width: 800, height: 600 },
       rangeExtractor: (range) =>
-        filterVirtualIndexes([...new Set([...defaultRangeExtractor(range), ...pinned])], range.count),
+        [...new Set([...defaultRangeExtractor(range), ...pinned])].filter((index) => index >= 0 && index < range.count),
     })
 
     expect(virtualizer.getVirtualItems().map((item) => item.index)).toEqual([0, 1])
