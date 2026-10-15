@@ -4,7 +4,7 @@ Every feature of the desktop and web app that is not the core shell is a built-i
 
 - Window SDK: `@opencode/plugin/gui` ([`index.ts`](../plugin/src/gui/index.ts))
 - Main-process SDK: `@opencode/plugin/gui/main` ([`main.ts`](../plugin/src/gui/main.ts))
-- Host-only: `@opencode/plugin/gui/host` ([`host.ts`](../plugin/src/gui/host.ts)): `compose`, the bridge protocol and the plugin bundle evaluator
+- Host-only, never published: `@opencode/plugin/gui/host` ([`host.ts`](../plugin/src/gui/host.ts)): `compose`, the bridge protocol and the plugin bundle evaluator
 - Rules for agents: [`AGENTS.md`](AGENTS.md)
 
 ```mermaid
