@@ -1,10 +1,11 @@
 ---
-title: "Overview"
+title: "Server plugins"
+description: "Build the server half of an OpenCode plugin: tools, hooks, integrations, commands, and agents."
 ---
 
-Plugins can modify OpenCode's behavior and add new features. One package can also change the terminal UI with a
-`./tui` export ([CLI plugins](/build/plugins/cli)) and the desktop app with a `./gui` export ([GUI
-plugins](/build/plugins/gui/package)).
+Plugins can modify OpenCode's behavior and add new features. A plugin's server half runs in the OpenCode server. One
+package can also change the terminal UI with a `./tui` export ([TUI plugins](/build/plugins/cli)) and the desktop app
+with a `./gui` export ([GUI plugins](/build/plugins/gui)).
 
 ```json title="package.json"
 {
