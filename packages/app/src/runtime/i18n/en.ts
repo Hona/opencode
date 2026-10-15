@@ -683,14 +683,10 @@ export const dict = {
   "settings.plugins.error.notFound": "Plugin not found",
   "settings.plugins.builtin": "Built-in",
   "settings.plugins.reserved": "Not loaded. A built-in plugin already uses this ID.",
-  "settings.plugins.part.desktop": "Desktop",
-  "settings.plugins.part.desktop.description":
-    "This switch turns off the desktop UI only. The other parts keep running.",
   "settings.plugins.part.server": "Server",
-  "settings.plugins.part.server.description":
-    'Running. Add "-{{id}}" to plugins in your global opencode.json to turn off the server part and the desktop UI.',
   "settings.plugins.part.tui": "TUI",
-  "settings.plugins.part.tui.description": 'Add "-{{id}}" to plugins in cli.json to turn off the TUI part.',
+  "settings.plugins.parts.note":
+    'Switches turn off only a plugin\'s desktop UI. Add "-<id>" to plugins in your global opencode.json to turn off its server part, or in cli.json to turn off its TUI part.',
   "settings.tab.about": "About",
   "settings.about.version": "Version {{version}}",
   "settings.about.devVersion": "development",
