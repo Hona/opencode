@@ -38,12 +38,12 @@ Users install it like any other plugin; there is no separate GUI install step.
 
 OpenCode resolves each entry point from `exports`, or from conventional file names in a local plugin directory.
 
-| Export | Conventional file | Runs in | SDK |
-| --- | --- | --- | --- |
-| `.` or `./server` | `server.ts`, else `index.ts` | The OpenCode server | `@opencode/plugin` |
-| `./tui` | `tui.tsx` | The TUI | `@opencode/plugin/tui` |
-| `./rpc` | `rpc.ts` | Typed RPC contract for the server and clients | `@opencode/plugin/rpc` |
-| `./gui` | `gui.cjs` or `gui.js` | Every desktop app window, and the desktop app's Electron main process | `@opencode/plugin/gui` |
+- **`.` or `./server`** (`server.ts`, else `index.ts`) runs in the OpenCode server and uses `@opencode/plugin`.
+- **`./tui`** (`tui.tsx`) runs in the TUI and uses `@opencode/plugin/tui`.
+- **`./rpc`** (`rpc.ts`) is the typed RPC contract between the server and its clients, written with
+  `@opencode/plugin/rpc`.
+- **`./gui`** (`gui.cjs` or `gui.js`) runs in every desktop app window and in the desktop app's Electron main process,
+  and uses `@opencode/plugin/gui`.
 
 Every SDK comes from the one `@opencode/plugin` dependency. Export any combination of entries; a package with only
 a server entry and `./gui` is as valid as one with all four.
@@ -211,10 +211,19 @@ Pass options to `gui()` to change the entry or the output file.
 export default defineConfig({ plugins: [gui({ entry: "src/desktop.tsx", outFile: "dist/desktop.cjs" })] })
 ```
 
-| Option | Default | Purpose |
-| --- | --- | --- |
-| `entry` | `src/gui.tsx` | The file that default-exports `Plugin.define`. |
-| `outFile` | `dist/gui.cjs` | The bundle that the `./gui` export points to. |
+- `entry` is the file that default-exports `Plugin.define`. It defaults to `src/gui.tsx`.
+- `outFile` is the bundle that the `./gui` export points to. It defaults to `dist/gui.cjs`.
+
+#### Reference
+
+```ts
+function gui(options?: GuiOptions): Plugin[]
+
+interface GuiOptions {
+  entry?: string
+  outFile?: string
+}
+```
 
 ### Dependencies
 
@@ -236,11 +245,17 @@ bun add -d electron @types/node
 Each process provides these modules to the bundle. Requiring a module that neither process provides fails the plugin's
 GUI.
 
-| Module | In a window | In the main process |
-| --- | --- | --- |
-| `effect`, `@opencode/plugin/gui`, `@opencode/plugin/gui/main`, `@opencode/plugin/rpc`, `@opencode/schema/rpc`, `@opencode/client`, `@opencode/client/effect` | The app's module | The app's module |
-| `solid-js`, `solid-js/web`, `solid-js/store`, `@opencode/client/solid`, `@opencode/plugin/gui/file`, `@opencode/plugin/gui/review`, `@opencode/plugin/gui/browser`, `@opencode/plugin/gui/updater` | The app's module | Inert placeholder |
-| `electron`, Node built-ins such as `node:fs` | Inert placeholder | The real module |
+```ts
+import { Schema } from "effect" // Both processes
+import { createSignal } from "solid-js" // Windows; an inert placeholder in the main process
+import { readFile } from "node:fs/promises" // The main process; an inert placeholder in windows
+```
+
+- **Both processes:** `effect`, `@opencode/plugin/gui`, `@opencode/plugin/gui/main`, `@opencode/plugin/rpc`,
+  `@opencode/schema/rpc`, `@opencode/client`, and `@opencode/client/effect`.
+- **Windows only:** `solid-js`, `solid-js/web`, `solid-js/store`, `@opencode/client/solid`, and
+  `@opencode/plugin/gui/{file,review,browser,updater}`. The main process gets inert placeholders.
+- **Main process only:** `electron` and Node built-ins such as `node:fs`. Windows get inert placeholders.
 
 ## Where GUI entries load
 
@@ -271,6 +286,6 @@ vite build --watch
   remove it.
 
 <Callout type="note">
-Built-in plugins keep their ids. If your server plugin's id is a built-in plugin's id, nests under one with a `.`, or is in
-the `opencode` namespace, your plugin does not load its GUI, and **Settings > Plugins** lists it as not loaded.
+  Built-in plugins keep their ids. If your server plugin's id is a built-in plugin's id, nests under one with a `.`, or
+  is in the `opencode` namespace, your plugin does not load its GUI, and **Settings > Plugins** lists it as not loaded.
 </Callout>

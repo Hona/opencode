@@ -77,22 +77,77 @@ main(ctx) {
 }
 ```
 
-| Property | Description |
-| --- | --- |
-| `ctx.options` | The plugin's options from its `opencode.json(c)` entry, the same object the server half gets. Empty for built-in plugins. |
-| `ctx.client` | The OpenCode client of the desktop app's own server, which runs the plugin. Call your server half with `ctx.client?.rpc(AcmeRpc)`. `undefined` for built-in plugins; read it where you call it, because it changes after that server restarts. |
-| `ctx.stores` | Every store declared with `Store.main(schema, initial, from?)`. Loaded before `main` runs; each `set` or `update` reaches SQLite at once. |
-| `ctx.storage` | SQLite storage for keys known only at runtime: `store(key, { schema, initial, from? })` and `remove(key)`. |
-| `ctx.scope` | The instance's lifetime: `signal`, `addFinalizer(fn)`, `fork(label)`, and `close()`. Finalizers may return a promise; the host waits up to 3 seconds during teardown. |
-| `ctx.provide` | Implements an `Ipc` token declared in `provides`. Returns an `IpcProvider` with `changed(window?)`, `emit(name, data, window?)`, and `dispose()`. |
-| `ctx.add` | Contributes to main-process registries such as `MenubarItem`. |
-| `ctx.windows` | The app's `BrowserWindow`s: `get(id)`, `list()`, `focused()`, and `on("open" \| "close", handler)`. |
-| `ctx.embeds` | `create(view, window)` places a `WebContentsView` in a window's layout. See [Embedded web views](#embedded-web-views). |
-| `ctx.serverEndpoints` | `get(serverId)` returns `{ id, url, headers, local, username?, password? }`. The desktop app's own server is `"sidecar"`. |
-| `ctx.cli` | The OpenCode CLI the desktop app runs: `{ version, command, binary?, development }`. |
-| `ctx.lifecycle` | `restart(handoff?, { keep: ctx.scope })` disposes the other plugins, then runs `handoff` or relaunches the app, keeping the caller alive until `handoff` settles. |
-| `ctx.log` | Writes to the desktop log file: `write("info" \| "warn" \| "error" \| "debug", message, data?)`. |
-| `ctx.app` | `{ name, version, channel, platform: "desktop", packaged }`. See [App metadata](/build/plugins/gui#app-metadata). |
+- `ctx.options`, `ctx.client`, and `ctx.app` are the [shared context](/build/plugins/gui#shared-context). In `main`,
+  `ctx.app.platform` is always `"desktop"`.
+- `ctx.stores` holds every store declared with `Store.main`. They load before `main` runs, and each `set` or `update`
+  reaches SQLite at once.
+- `ctx.storage` opens SQLite stores for keys known only at runtime.
+- `ctx.scope` is the instance's lifetime. Finalizers may return a promise; the host waits up to 3 seconds for them
+  during teardown.
+- `ctx.provide` implements an `Ipc` token declared in `provides`; see [Define and provide an Ipc](#define-and-provide-an-ipc).
+- `ctx.add` contributes to main-process registries such as [`MenubarItem`](#native-app-menu).
+- `ctx.windows` lists the app's `BrowserWindow`s and reports when one opens or closes.
+- `ctx.embeds` places a `WebContentsView` in a window's layout; see [Embedded web views](#embedded-web-views).
+- `ctx.serverEndpoints.get(id)` returns a server's URL and credentials. The desktop app's own server is `"sidecar"`.
+- `ctx.cli` describes the OpenCode CLI the desktop app runs.
+- `ctx.lifecycle.restart(handoff?, { keep: ctx.scope })` disposes the other plugins, then runs `handoff` or relaunches
+  the app. It keeps the caller alive until `handoff` settles.
+- `ctx.log.write` writes to the desktop log file.
+
+#### Reference
+
+```ts
+interface MainContext {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient | undefined
+  app: App
+  stores: Record<string, Persisted<unknown>>
+  storage: MainStorage
+  scope: Scope
+  provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>
+  add<T>(registry: Registry<T>, item: T | (() => T | undefined)): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  windows: Windows
+  embeds: MainEmbeds
+  serverEndpoints: { get(id: string): ServerEndpoint | undefined }
+  cli: { version: string; command: string[]; binary?: string; development: boolean }
+  lifecycle: { restart(handoff?: () => void | Promise<void>, options?: { keep?: Scope }): Promise<void> }
+  log: { write(level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>): void }
+}
+
+interface MainStorage {
+  store(key: string, options: { schema: Schema; initial: T; from?: MainStoreFrom | MainStoreFrom[] }): Persisted<T>
+  remove(key: string, options?: { from?: MainStoreFrom | MainStoreFrom[] }): void
+}
+
+type MainStoreFrom = { settings: string; file?: string } | { state: [namespace: string, key: string] }
+
+interface Scope {
+  signal: AbortSignal
+  addFinalizer(fn: Cleanup): Cleanup
+  fork(name: string): Scope
+  close(): Promise<void>
+}
+
+interface Windows {
+  get(id: number): BrowserWindow | undefined
+  list(): BrowserWindow[]
+  focused(): BrowserWindow | undefined
+  on(event: "open" | "close", handler: (window: BrowserWindow) => void): Cleanup
+}
+
+interface ServerEndpoint {
+  id: string
+  url: string
+  headers: Record<string, string>
+  local: boolean
+  username?: string
+  password?: string
+}
+```
 
 ## Define and provide an Ipc
 
@@ -128,6 +183,17 @@ import { Counter } from "./contract"
 export const definition = Plugin.define({ id: "acme", provides: { counter: Counter } })
 ```
 
+#### Reference
+
+```ts
+interface IpcSpec {
+  id: string
+  state?: Schema
+  methods: Record<string, { input?: Schema; output?: Schema }>
+  events?: Record<string, Schema>
+}
+```
+
 ### Implement the provider in main
 
 Each method receives the decoded input and a `Caller` (`{ window, signal }`). Call `provider.changed(window?)` when
@@ -158,6 +224,32 @@ export const main: Plugin.MainSetup<typeof definition> = (ctx) => {
       provider.changed(caller.window)
     },
   })
+}
+```
+
+- A spec with `state` also needs `state(window)` in the implementation. Main reads it when a window subscribes and on
+  every `changed`.
+- A method that throws rejects the window's call.
+- `changed` and `emit` reach every window when you omit `window`.
+- `dispose()` withdraws the `Ipc` early, and windows see it `inactive`. The host also withdraws it when the plugin
+  stops.
+
+#### Reference
+
+```ts
+type IpcImpl<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: (input: Input<Name>, caller: Caller) => Output<Name> | Promise<Output<Name>>
+} & { state(window: number): State }
+
+interface Caller {
+  window: number
+  signal: AbortSignal
+}
+
+interface IpcProvider<S extends IpcSpec> {
+  changed(window?: number): void
+  emit(name: keyof S["events"], data: EventData, window?: number): void
+  dispose(): void
 }
 ```
 
@@ -205,6 +297,19 @@ const count = () => {
   const live = ctx.uses.counter()
 
   return live.status === "active" ? (live.value.state()?.count ?? 0) : 0
+}
+```
+
+#### Reference
+
+```ts
+type IpcClient<S extends IpcSpec> = {
+  [Name in keyof S["methods"]]: S["methods"][Name] extends { input: Schema }
+    ? (input: Input<Name>, options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+    : (options?: { signal?: AbortSignal }) => Promise<Output<Name>>
+} & {
+  state(): State | undefined
+  on(name: keyof S["events"], listener: (data: EventData) => void): Cleanup
 }
 ```
 
@@ -265,13 +370,21 @@ ctx.add(MenubarItem, {
 })
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `menu` | `"app"`, `"file"`, `"edit"`, `"view"`, `"go"`, `"window"`, or `"help"`. |
-| `id`, `label` | The item's id within the plugin, and its translated label. |
-| `after` | The item it follows: another of this plugin's items by id, or a built-in item. |
-| `enabled()` | Whether the item is enabled. |
-| `run(window)` | Runs the item with the focused window, if any. |
+- `after` is the item it follows: another of this plugin's items by id, or a built-in item.
+- `run` receives the focused window, if any.
+
+#### Reference
+
+```ts
+interface MenubarItem {
+  menu: "app" | "file" | "edit" | "view" | "go" | "window" | "help"
+  id: string
+  label: string
+  after?: string
+  enabled?(): boolean
+  run(window: BrowserWindow | undefined): void
+}
+```
 
 ## Embedded web views
 
@@ -291,13 +404,46 @@ embed.show(true)
 <ctx.embeds.View id={embedId} visible radius={8} />
 ```
 
-| `Embed` member | Purpose |
-| --- | --- |
-| `id` | The id a window passes to `ctx.embeds.View` and `ctx.embeds.capture`. |
-| `show(visible)` | The page's side of visibility: the view shows only while the window lays it out and `show(true)` holds. |
-| `on("visible", handler)` | Runs when the view goes on or off screen, including when the window paints a still in its place. |
-| `capture()` | A still of the page, or `undefined` while it is hidden. |
-| `dispose()` | Removes the view. The host also disposes it when the plugin goes away. |
+- A window passes the embed's `id` to `ctx.embeds.View` and `ctx.embeds.capture`.
+- `show(visible)` is the page's side of visibility: the view shows only while the window lays it out and `show(true)`
+  holds.
+- `on("visible", handler)` runs when the view goes on or off screen, including when the window paints a still in its
+  place.
+- `capture()` returns a still of the page, or `undefined` while it is hidden.
+- `dispose()` removes the view. The host also disposes it when the plugin goes away.
+- In the window, `View` fills its box with the embed. The host keeps the view's bounds, zoom, rounded corners, and
+  dialog occlusion in step, and hides it while the window is hidden or a dialog is open.
+- `frozen` paints a still in place of the live view, so DOM content can float above it. `radius` rounds the bottom
+  corners, and `background` is the color the corners show.
+- The window's `capture(id)` returns a JPEG still, or `undefined` while the embed is hidden and always on the web.
 
-The host keeps the view's bounds, zoom, rounded corners, dialog occlusion, and still frames (`frozen`) in step across
-the process boundary.
+#### Reference
+
+```ts
+interface MainEmbeds {
+  create(view: WebContentsView, window: BrowserWindow): Embed
+}
+
+interface Embed {
+  id: string
+  show(visible: boolean): void
+  on(event: "visible", handler: (visible: boolean) => void): Cleanup
+  capture(): Promise<NativeImage | undefined>
+  dispose(): void
+}
+
+interface Embeds {
+  View(props: EmbedProps): JSX.Element
+  capture(id: string): Promise<Uint8Array | undefined>
+}
+
+interface EmbedProps {
+  id: string | undefined
+  visible: boolean
+  frozen?: boolean
+  radius?: number
+  background?: string
+  class?: string
+  children?: JSX.Element
+}
+```

@@ -5,10 +5,8 @@ description: "Toggle, reload, and troubleshoot plugins in the OpenCode Desktop i
 
 OpenCode Desktop lists the plugins that run in its interface under **Settings > Plugins**. The page shows the built-in plugins that ship with the app and the GUI parts of your [plugins](/plugins#desktop).
 
-| Source | Where it comes from | Label | How to remove it |
-| --- | --- | --- | --- |
-| Built-in | Ships with the app | **Built-in** | Cannot be removed; turn it off |
-| Plugin | A plugin in `opencode.json(c)` that exports `./gui` | — | Remove the plugin from `opencode.json(c)` |
+- **Built-in plugins** ship with the app and carry a **Built-in** label. You cannot remove them, but you can turn them off.
+- **Your plugins** come from `opencode.json(c)`, when the plugin package exports `./gui`. Remove the plugin from `opencode.json(c)` to remove it.
 
 Built-in plugins provide the app's workspace features, such as the [terminal](/desktop/terminal), [review](/desktop/review) panel, and [browser](/desktop/browser). They are enabled by default.
 
@@ -23,7 +21,9 @@ Open **Settings** (**Cmd+,** on macOS or **Ctrl+,** on Windows and Linux) and se
 You can also open the command palette (**Cmd+K** / **Ctrl+K**), search for `Plugins`, and jump directly to the page.
 
 <Callout type="note">
-The app-level **Plugins** page lists the plugins that run in this desktop app's interface. Each server's **Extensions** tab lists [MCP servers](/mcp-servers), server [plugins](/plugins), and [skills](/skills) on that server.
+  The app-level **Plugins** page lists the plugins that run in this desktop app's interface. Each server's
+  **Extensions** tab lists [MCP servers](/mcp-servers), server [plugins](/plugins), and [skills](/skills) on that
+  server.
 </Callout>
 
 ## Enable, disable, and reload
@@ -35,10 +35,8 @@ terminal  Built-in   Active    Reload  [on]
 acme                 Active    Reload  [on]
 ```
 
-| Control | Behavior |
-| --- | --- |
-| **Switch** | Enables or disables the plugin across all desktop windows. The preference persists in the desktop database across restarts. |
-| **Reload** | Reloads both the window setup and the main setup and clears any recorded failure. If a main setup reload fails, the last working revision remains active. |
+- **Switch:** enables or disables the plugin in all desktop windows. The setting persists across restarts.
+- **Reload:** reloads the plugin in every window and in the main process, and clears any recorded failure. If the main process reload fails, the last working revision stays active.
 
 When you disable a plugin, the host immediately withdraws all of its commands, panels, slots, titlebar items, native menu items, and settings pages in a single frame.
 
@@ -69,13 +67,13 @@ opencode plugin remove opencode-acme
 ```
 
 <Callout type="note">
-A plugin's GUI uses the plugin's ID. If a built-in plugin already uses that ID, the built-in plugin loads and the plugin's GUI does not; **Settings > Plugins** lists the plugin as not loaded.
+  A plugin's GUI uses the plugin's ID. If a built-in plugin already uses that ID, the built-in plugin loads and the
+  plugin's GUI does not; **Settings > Plugins** lists the plugin as not loaded.
 </Callout>
 
 <CardGroup cols={1}>
   <Card title="Build a GUI plugin" href="/build/plugins/gui/package">
-    Add a `./gui` export to your plugin package to ship panels, commands, settings pages, and main-process
-    integrations.
+    Add a `./gui` export to your plugin package to ship panels, commands, settings pages, and main-process integrations.
   </Card>
 </CardGroup>
 
@@ -83,13 +81,11 @@ A plugin's GUI uses the plugin's ID. If a built-in plugin already uses that ID, 
 
 Each plugin reports its live state in the current window:
 
-| Status | Meaning |
-| --- | --- |
-| **Active** | The plugin's setup completed and its contributions are live. |
-| **Loading** | The plugin is loading its bundle or waiting for its global stores or hard dependencies. |
-| **Disabled** | The plugin is turned off in Settings. |
-| **Blocked** | A hard dependency (`requires`) that this plugin depends on is disabled, failed, or itself blocked. Re-enabling the provider automatically resumes the plugin. |
-| **Failed** | The plugin's bundle failed to load, its setup threw an error, or one of its reactive effects crashed. |
+- **Active:** the plugin's setup completed and its contributions are live.
+- **Loading:** the plugin is loading its bundle, or waiting for its stored state or the plugins it requires.
+- **Disabled:** the plugin is turned off in Settings.
+- **Blocked:** a plugin it requires is off, failed, or blocked itself. The plugin resumes when that plugin runs again.
+- **Failed:** the plugin's bundle failed to load, its setup threw an error, or one of its effects crashed.
 
 If a plugin fails during setup or while rendering a contribution, the error stack is displayed in red directly below its status in **Settings > Plugins**. One broken plugin never blocks the rest of the application.
 
@@ -97,21 +93,19 @@ If a plugin fails during setup or while rendering a contribution, the error stac
 
 All 13 built-in plugins are enabled by default. `wsl` runs on Windows only; all other built-ins run on macOS, Windows, and Linux.
 
-| ID | Feature area | Dependencies (`uses`) |
-| --- | --- | --- |
-| `context` | Context usage ring, token breakdown tab, and session JSON export | — |
-| `btw` | `/btw` side-question slash command and answer tabs | — |
-| `debug` | Provider performance metrics bar (`TPS`, `TTFT`, `TTFA`, `E2E`) | — |
-| `terminal` | Dock terminal tabs powered by `ghostty-web` | — |
-| `file` | Workspace file tree, artifact viewers, link handler, and desktop **Open in** menu | `review.changes`, `browser` |
-| `review` | Uncommitted, branch, and last-turn diff viewer with line comments | `file.tree`, `file.openInApp` |
-| `details` | Session header summary popover, worktree mover, and server status popovers | `review.changes` |
-| `browser` | Native Chromium browser pane, element comment picker, and `browser.*` agent tools | `browser.pane` (main IPC) |
-| `pairing` | **Settings > Pairing** QR code, custom address, and display sleep blocker | `pairing` (main IPC) |
-| `updater` | Automatic desktop updates, titlebar pill, and What's New dialog | `updater` (main IPC) |
-| `ssh` | Remote SSH server connections and automatic remote CLI provisioning | `ssh` (main IPC) |
-| `wsl` | Windows Subsystem for Linux server management and distro installer (Windows only) | `wsl` (main IPC) |
-| `microsoft-office` | Read-only Word (`.docx`), Excel (`.xlsx`), and PowerPoint (`.pptx`) viewers | Contributes to `file.viewer` |
+- `context`: the context usage ring, the token breakdown tab, and session JSON export.
+- `btw`: the `/btw` side-question slash command and its answer tabs.
+- `debug`: the provider performance metrics bar (`TPS`, `TTFT`, `TTFA`, `E2E`).
+- `terminal`: dock terminal tabs, powered by `ghostty-web`.
+- `file`: the workspace file tree, file viewers, local link handling, and the desktop **Open in** menu.
+- `review`: the uncommitted, branch, and last-turn diff viewer with line comments.
+- `details`: the session header summary popover, the worktree mover, and server status popovers.
+- `browser`: the native Chromium browser pane, the element comment picker, and the `browser.*` agent tools.
+- `pairing`: the **Settings > Pairing** QR code, custom address, and display sleep blocker.
+- `updater`: automatic desktop updates, the titlebar pill, and the What's New dialog.
+- `ssh`: remote SSH server connections and automatic remote CLI setup.
+- `wsl`: Windows Subsystem for Linux server management and the distro installer.
+- `microsoft-office`: read-only Word (`.docx`), Excel (`.xlsx`), and PowerPoint (`.pptx`) viewers.
 
 ## Customizing plugin shortcuts
 

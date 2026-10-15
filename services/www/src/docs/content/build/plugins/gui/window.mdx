@@ -84,22 +84,38 @@ ctx.add(Command, {
 })
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `id` | Local id; the host publishes `<plugin id>.<id>`. |
-| `title` | The palette label. |
-| `description` | The palette's second line. |
-| `group` | The palette category, as translated text. |
-| `section` | The **Settings > Shortcuts** section. Defaults to `general`. |
-| `bind` | The default keybind, for example `mod+shift+t`. Users can change it. |
-| `slash` | Also offers the command in the `/` menu: `{ name, arguments?, after? }`. With `arguments: true`, the text after the name goes to `run`. |
-| `hidden` | Keeps the command out of the palette; its keybind still works. |
-| `suggested` | Also lists the command under **Suggested** while it is enabled. |
-| `featured` | Lists the command when the palette opens without a query. |
-| `enabled` | `false` takes the command out of the palette and turns its keybind off. Reactive. |
-| `scope` | A CSS selector the keyboard focus must be inside for the binding to apply. |
-| `editable` | The binding also fires while a text field has focus. |
-| `run(input?)` | Runs the command. `input` is the slash command's argument text. |
+- `title` is the palette label, `description` its second line, and `group` its category, as translated text.
+- `section` is the **Settings > Shortcuts** section. It defaults to `general`.
+- `bind` is the default keybind, for example `mod+shift+t`. Users can change it.
+- `slash` also offers the command in the `/` menu. With `arguments: true`, the text after the name goes to
+  `run(input)`.
+- `hidden` keeps the command out of the palette, but its keybind still works.
+- `suggested` also lists the command under **Suggested** while it is enabled. `featured` lists it when the palette opens
+  without a query.
+- `enabled: false` takes the command out of the palette and turns its keybind off. It is reactive.
+- `scope` is a CSS selector that keyboard focus must be inside for the binding to apply. With `editable`, the binding
+  also fires while a text field has focus.
+
+#### Reference
+
+```ts
+interface Command {
+  id: string
+  title: string
+  description?: string
+  group?: string
+  section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
+  bind?: string
+  slash?: { name: string; arguments?: true; after?: string }
+  hidden?: true
+  suggested?: boolean
+  featured?: true
+  enabled?: boolean
+  scope?: string
+  editable?: true
+  run(input?: string): void | Promise<void>
+}
+```
 
 ### Panels
 
@@ -133,35 +149,86 @@ All panel callbacks (`list`, `render`, `focus`, `close`, `normalize`) receive a 
   session that is routed.
 - Return the same `PanelTab` object from `list` while a tab is unchanged, so the host does not remount its trigger.
 
-| `Panel` field | Purpose |
-| --- | --- |
-| `id`, `region` | The panel's id within the plugin, and `"side"` or `"dock"`. |
-| `list(input)` | The tabs to show. `input.open` holds this plugin's stored tab ids. Reactive. |
-| `render(props)` | Renders a tab's content once. |
-| `focus(input)` | Runs when a tab is selected. `input.restored` is true for the selection the region mounts with. |
-| `close(props)` | Runs after the host removes a tab. |
-| `normalize(input)` | The canonical form of a stored tab id that can be stored more than one way. |
-| `mobile` | A narrow-screen view: `{ title, order, kind, icon }`. |
-| `wide` | Asks for the wider session minimum while the side region is open. |
-| `transient` | Tabs are not restored. |
-| `legacy` | Stored tab keys from an earlier version, mapped to this panel's tab ids. |
+A panel's callbacks:
 
-| `PanelTab` field | Purpose |
-| --- | --- |
-| `id`, `title` | The tab id (host key `<plugin id>:<id>`) and its accessible name. |
-| `label(state)` | Custom trigger content. `state` has `active`, `preview`, and `session`. |
-| `pinned` | Listed without being opened, first, and never closed or dragged. |
-| `draggable` | The user can reorder the tab. Defaults to `true`. |
-| `closable` | The close button's look: `"compact"`, `"hover"`, or `false`. |
-| `transient` | A launcher tab, such as **Open file**, that the next preview replaces. |
-| `first` | Renders before the tabs in stored order. |
-| `fallback` | Opts into fallback selection when the stored selection is missing. |
-| `group` | Tabs in one group share one render that stays mounted. |
-| `missing` | Struck through, for example a file that no longer exists. |
-| `hidden` | Listed and selectable but not drawn, for a restored tab whose content is not known yet. |
-| `file` | The workspace path the tab shows, listed as one of the session's open files. |
-| `tabbable` | The tab panel joins the tab order, for content without focusable elements. |
-| `dom` | Stable DOM ids for the trigger and the panel. |
+- `list` returns the tabs to show. `input.open` holds this plugin's tab ids stored in the session. It is reactive.
+- `render` renders a tab's content once.
+- `focus` runs when a tab is selected. `restored` is `true` for the selection the region mounts with.
+- `close` runs after the host removes a tab.
+- `normalize` returns the canonical form of a stored tab id that can be stored more than one way.
+
+A panel's options:
+
+- `mobile` adds a narrow-screen view of the panel.
+- `wide` asks for the wider session minimum while the side region is open.
+- `transient` panels' tabs are not restored.
+- `legacy` maps stored tab keys from an earlier version to this panel's tab ids.
+
+A tab's options:
+
+- `id` is the tab id; its host key is `<plugin id>:<id>`. `title` is its accessible name, and `label` renders custom
+  trigger content.
+- `pinned` tabs are listed without being opened, come first, and are never closed or dragged.
+- `draggable` lets the user reorder the tab. It defaults to `true`.
+- `closable` sets the close button's look: `"compact"`, `"hover"`, or `false` for none.
+- `transient` marks a launcher tab, such as **Open file**, that the next preview replaces.
+- `first` renders the tab before the tabs in stored order.
+- `fallback` opts into fallback selection when the stored selection is missing.
+- Tabs in one `group` share one render that stays mounted.
+- `missing` strikes the tab through, for example for a file that no longer exists.
+- `hidden` keeps a restored tab listed and selectable but not drawn, while its content is not known yet.
+- `file` is the workspace path the tab shows, listed as one of the session's open files.
+- `tabbable` puts the tab panel in the tab order, for content without focusable elements.
+- `dom` sets stable DOM ids for the trigger and the panel.
+
+#### Reference
+
+```ts
+interface Panel {
+  id: string
+  region: "side" | "dock"
+  mobile?: MobileView
+  wide?: boolean
+  transient?: boolean
+  legacy?: Record<string, string>
+  list(input: { session: MountedSession; screen: SessionScreen; open: string[] }): PanelTab[]
+  render(props: PanelProps): JSX.Element
+  focus?(input: PanelProps & { restored: boolean }): void
+  close?(input: PanelProps): void
+  normalize?(input: { id: string; session: MountedSession; screen: SessionScreen }): string
+}
+
+interface PanelProps {
+  tab: PanelTab
+  session: MountedSession
+  screen: SessionScreen
+}
+
+interface PanelTab {
+  id: string
+  title: string
+  label?(state: { active: boolean; preview: boolean; session: MountedSession }): JSX.Element
+  pinned?: boolean
+  draggable?: boolean
+  closable?: "compact" | "hover" | false
+  transient?: boolean
+  first?: boolean
+  fallback?: boolean
+  group?: string
+  missing?: boolean
+  hidden?: boolean
+  file?: string
+  tabbable?: boolean
+  dom?: { tab?: string; panel?: string }
+}
+
+interface MobileView {
+  title: string
+  order: number
+  kind: "tab" | "menu" | "drawer"
+  icon?: IconName
+}
+```
 
 ### Settings pages
 
@@ -193,14 +260,35 @@ ctx.add(SettingsPage, {
 onCleanup(onIdle(() => void Page.preload()))
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `id` | The page's settings tab value (`/settings?tab=<id>`) and the argument to `ctx.layout.settings`. |
-| `page`, `section` | Adds a section to a host page, or rows to its General section, instead of a page. |
-| `title`, `icon` | The nav label and icon of a page. |
-| `available` | Where the page is offered, for example `"desktop"`. Omit it for everywhere. |
-| `entries` | Search metadata, indexed without mounting the page. |
-| `render(input)` | Renders the page, section, or rows. |
+- `id` is the page's settings tab value (`/settings?tab=<id>`) and the argument to `ctx.layout.settings`.
+- `page` adds a section to a host page instead of a page. With `section: "general"`, it adds rows to that page's General
+  section.
+- `title` and `icon` are a page's navigation label and icon.
+- `available` limits where the page is offered. Omit it to offer the page everywhere.
+- `entries` is search metadata, indexed without mounting the page. When search reveals an entry, `render` receives its
+  id as `target`.
+
+#### Reference
+
+```ts
+interface SettingsPage {
+  id: string
+  page?: "general" | "servers"
+  section?: "general"
+  title: string
+  icon?: IconName
+  available?: "desktop" | "mobile"
+  entries?: SettingEntry[]
+  render(input: { target?: string }): JSX.Element
+}
+
+interface SettingEntry {
+  id: string
+  title: string
+  description?: string
+  keywords?: string
+}
+```
 
 ### Slots
 
@@ -216,12 +304,28 @@ ctx.add(Slot, {
 })
 ```
 
-| Slot | Placement | Input properties |
-| --- | --- | --- |
-| `"window.bottom"` | Full-width strip at the bottom of the window above toasts | `{}` |
-| `"session.header"` | The session timeline title row | `{ screen, session, active }` |
-| `"session.panel.end"` | Actions at the trailing end of the side panel tab strip | `{ screen, session }` |
-| `"session.panel.sidebar"` | The collapsible inner sidebar of the side panel | `{ screen, session }` |
+- `window.bottom` is a full-width strip at the bottom of the window, above toasts.
+- `session.header` is the session timeline's title row.
+- `session.panel.end` holds actions at the trailing end of the side panel's tab strip.
+- `session.panel.sidebar` is the side panel's collapsible inner sidebar.
+- `order` sorts the items in one slot.
+
+#### Reference
+
+```ts
+interface Slot<At extends keyof SlotMap> {
+  at: At
+  order?: number
+  render(input: SlotMap[At]): JSX.Element
+}
+
+interface SlotMap {
+  "window.bottom": {}
+  "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
+  "session.panel.end": { screen: SessionScreen; session: MountedSession }
+  "session.panel.sidebar": { screen: SessionScreen; session: MountedSession }
+}
+```
 
 ### Menu items
 
@@ -245,13 +349,44 @@ ctx.add(MenuItem, {
 })
 ```
 
-| Field | Menus | Purpose |
-| --- | --- | --- |
-| `menu`, `id`, `title` | All | The menu, the item's id within the plugin, and its label. |
-| `order` | All | Ascending sort order. Defaults to `0`. |
-| `icon`, `keybind` | `session.panel` | The item's icon, and the published command id whose shortcut it shows. |
-| `when(server)`, `enabled(server)` | `server.row` | Lists the item only on some rows, and shows it disabled on others. |
-| `run` | All | Runs the item. A `server.row` item receives the row's server key. |
+- `order` sorts the items in ascending order. It defaults to `0`.
+- A `session.panel` item can show an `icon`, and the shortcut of the published command id in `keybind`.
+- A `server.row` item's `run` receives the row's server key. `when` lists the item only on some rows, and `enabled`
+  shows it disabled on others.
+
+#### Reference
+
+```ts
+type MenuItem = SessionPanelMenuItem | ServerAddMenuItem | ServerRowMenuItem
+
+interface SessionPanelMenuItem {
+  menu: "session.panel"
+  id: string
+  title: string
+  order?: number
+  icon?: IconName
+  keybind?: string
+  run(): void
+}
+
+interface ServerAddMenuItem {
+  menu: "server.add"
+  id: string
+  title: string
+  order?: number
+  run(): void
+}
+
+interface ServerRowMenuItem {
+  menu: "server.row"
+  id: string
+  title: string
+  order?: number
+  when?(server: string): boolean
+  enabled?(server: string): boolean
+  run(server: string): void
+}
+```
 
 ### Titlebar items
 
@@ -266,12 +401,25 @@ ctx.add(TitlebarItem, () =>
 )
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `id`, `label`, `title` | The item's id, its visible label, and an accessible name when it differs. |
-| `placement` | `"titlebar"` (default) or `"channel"`. |
-| `icon`, `busy`, `pressed` | The pill's icon, a spinner that disables it, and a pressed state. |
-| `run` | Runs on click. Omit it for an item that only shows. |
+- `placement` defaults to `"titlebar"`.
+- `title` is the accessible name when it differs from `label`.
+- `busy` shows a spinner and disables the pill. `pressed` shows it pressed.
+- `run` runs on click. Omit it for an item that only shows.
+
+#### Reference
+
+```ts
+interface TitlebarItem {
+  id: string
+  placement?: "titlebar" | "channel"
+  label: string
+  title?: string
+  icon?: IconName
+  busy?: boolean
+  pressed?: boolean
+  run?(): void
+}
+```
 
 ### Link handlers
 
@@ -289,16 +437,32 @@ ctx.add(LinkHandler, {
 })
 ```
 
-| `Link` field | Purpose |
-| --- | --- |
-| `href` | The target: a path, URL, or `file://` link. |
-| `origin` | The plugin that produced the linked item. |
-| `exact` | The path is a known workspace file, not a guess from text. |
-| `background` | Must not switch the narrow-screen view. |
-| `base` | The workspace-relative directory the link was written in. |
-| `session` | The session the link belongs to. |
+- `href` is the target: a path, a URL, or a `file://` link.
+- `origin` is the plugin that produced the linked item.
+- `exact` means the path is a known workspace file, not a guess from text.
+- A `background` link must not switch the narrow-screen view.
+- `base` is the workspace-relative directory the link was written in.
+- Without `exists`, `ctx.links.exists` answers `false`, so text never looks like a link the handler cannot open.
 
-Without `exists`, `ctx.links.exists` answers `false`, so text never looks like a link the handler cannot open.
+#### Reference
+
+```ts
+interface LinkHandler {
+  priority?: number
+  match(link: Link): boolean
+  open(link: Link): void
+  exists?(link: Link): boolean | Promise<boolean>
+}
+
+interface Link {
+  href: string
+  origin?: string
+  exact?: boolean
+  background?: boolean
+  base?: string
+  session?: SessionRef
+}
+```
 
 ### Servers
 
@@ -319,20 +483,57 @@ ctx.add(Server, () => ({
 }))
 ```
 
-| Field | Purpose |
-| --- | --- |
-| `ready` | Startup waits for every source. A ready source's entries are its complete inventory. |
-| `order` | Ascending sort order of sources. |
-| `entries` | The servers. Each entry's key is `<plugin id>:<id>`. |
+- Startup waits for every source to be `ready`. A ready source's entries are its complete inventory.
+- `order` sorts the sources in ascending order.
+- Each entry's key is `<plugin id>:<id>`. `label` is a short badge beside its `name`.
+- `auth` means the server waits for the user to sign in, and `incompatible` that it runs a version this app does not
+  support.
+- `listed: false` keeps the entry out of the app's server list. Settings still shows it.
+- `http` is the endpoint, once the server is `ready`.
+- `reconnect` resolves a dropped endpoint again, `connect` prepares a server that is not ready, and `remove` runs before
+  the entry is removed.
+- `row` renders the server's settings row, and `cover` covers the routed session while the server is not ready.
+- A `row` receives the host's status `Indicator`, the latest `health()` check, and the row's `server.row` menu `Items`.
+  Its `remove()` runs the entry's `remove`, then closes the server's tabs.
 
-| `ServerEntry` field | Purpose |
-| --- | --- |
-| `id`, `name`, `label` | The entry's id, its display name, and a short badge. |
-| `state` | `"stopped"`, `"starting"`, `"auth"`, `"ready"`, `"failed"`, or `"incompatible"`. |
-| `listed` | `false` keeps the entry out of the app's server list; Settings still shows it. |
-| `http` | The endpoint, once the server is `ready`. |
-| `reconnect`, `connect`, `remove` | Re-resolves a dropped endpoint, prepares a server that is not ready, and runs before removal. |
-| `row`, `cover` | The server's settings row, and a cover over the routed session while the server is not ready. |
+#### Reference
+
+```ts
+interface Server {
+  ready: boolean
+  order?: number
+  entries: ServerEntry[]
+}
+
+interface ServerEntry {
+  id: string
+  name: string
+  label?: string
+  state: "stopped" | "starting" | "auth" | "ready" | "failed" | "incompatible"
+  listed?: boolean
+  http?: { url: string; username?: string; password?: string }
+  reconnect?(signal: AbortSignal): Promise<{ url: string; password?: string }>
+  connect?(): Promise<boolean>
+  remove?(): Promise<void>
+  row?(row: ServerRow): JSX.Element
+  cover?(input: { tab: string }): JSX.Element
+}
+
+interface ServerRow {
+  key: string
+  health(): ServerHealth | undefined
+  Indicator(props: { health?: ServerHealth; connecting?: boolean; auth?: boolean }): JSX.Element
+  remove(): Promise<void>
+  Items(): JSX.Element
+}
+
+interface ServerHealth {
+  healthy: boolean
+  version?: string
+  incompatible?: boolean
+  checking?: boolean
+}
+```
 
 ### Styles
 
@@ -351,24 +552,56 @@ Host APIs are properties of `ctx`. None of them throw before the app interface m
 defaults, and early writes, such as `ctx.layout.open`, `ctx.dialogs.open`, and store updates, wait and apply in call
 order once the first route renders.
 
-| Property | Description |
-| --- | --- |
-| `ctx.layout` | Opens, closes, and queries panel tabs and regions. See [Layout](#layout). |
-| `ctx.sessions` | `list()` the open session tabs and read `current()`, the routed `MountedSession`. |
-| `ctx.screen` | Reads `current()`, the routed `SessionScreen` (`file`, `comment`, `composer`). |
-| `ctx.storage` | Opens stores for keys known only at runtime. See [Runtime stores](#runtime-stores). |
-| `ctx.dialogs` | `open(render, { replace? })` and `active()`. See [Dialogs](#dialogs). |
-| `ctx.servers` | `list()` server ids and `get(id)` a live `ServerRef`. See [Servers and server events](#servers-and-server-events). |
-| `ctx.system` | `copy(text)`, `save({ name, content })`, and `openExternal(url)` on every platform. |
-| `ctx.desktop` | Desktop only (`undefined` on the web): `os`, `window`, `zoom()`, `launch(path, app?)`, `reveal(path)`, `installed(app)`, and `forceFocus(enabled)`. |
-| `ctx.embeds` | Renders a main-process `WebContentsView` in `<ctx.embeds.View id={id} visible={visible} />`, or `capture(id)` a JPEG still. |
-| `ctx.links` | `open(link)` routes a `Link` to a `LinkHandler`; `exists(link)` asks whether its target exists. |
-| `ctx.keybinds` | Formats a command's shortcut, formats raw chords, and tests keyboard events. See [Keybinds](#keybinds). |
-| `ctx.locale` | `locale()`, `direction()` (`"ltr"` or `"rtl"`), and `setDirection()`. |
-| `ctx.appearance` | `font("mono")`, the user's monospace font family. |
-| `ctx.router` | `path()` and `routing()`. |
-| `ctx.workspaces` | `on("remove", ({ server, directory }) => …)` to clean up workspace-scoped stores. |
-| `ctx.options`, `ctx.client`, `ctx.app` | The plugin's options, its server client, and app metadata. See [Shared context](/build/plugins/gui#shared-context). |
+```ts
+ctx.add(Command, {
+  id: "copy-directory",
+  title: ctx.t("command.copyDirectory"),
+  run: () => {
+    const session = ctx.sessions.current()
+
+    if (session) void ctx.system.copy(session.directory)
+  },
+})
+```
+
+The sections below cover each API. `ctx.options`, `ctx.client`, and `ctx.app` are the
+[shared context](/build/plugins/gui#shared-context), and `ctx.uses`, `ctx.requires`, and `ctx.stores` hold what the
+plugin [declares](/build/plugins/gui#define-the-gui-plugin).
+
+#### Reference
+
+```ts
+interface Context {
+  id: string
+  options: PluginOptions
+  client: OpenCodeClient | undefined
+  app: App
+  signal: AbortSignal
+  uses: Record<string, () => Live<unknown>>
+  requires: Record<string, unknown>
+  stores: Record<string, Persisted<unknown> | ((session: SessionRef) => Persisted<unknown>)>
+  add<T>(registry: Registry<T>, item: T | (() => T | undefined)): Cleanup
+  list<T>(registry: Registry<T>): T[]
+  provide<T>(token: Contract<T>, impl: T): Cleanup
+  t(key: string, params?: Record<string, string | number | boolean>): string
+  plural(key: string, count: number, params?: Record<string, string | number | boolean>): string
+  layout: Layout
+  sessions: Sessions
+  screen: Screen
+  servers: Servers
+  storage: Storage
+  dialogs: Dialogs
+  keybinds: Keybinds
+  links: Links
+  embeds: Embeds
+  system: System
+  desktop: Desktop | undefined
+  locale: Locale
+  appearance: Appearance
+  router: Router
+  workspaces: Workspaces
+}
+```
 
 ### Layout
 
@@ -381,23 +614,55 @@ const session = ctx.sessions.current()
 if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", background: true })
 ```
 
-| Member | Purpose |
-| --- | --- |
-| `open`, `close`, `toggle` | Opens, closes, or toggles a tab by key for a session. |
-| `state(key, session)` | `"closed"`, `"open"`, `"active"`, or `"visible"`. |
-| `stored(session)` | This plugin's tab ids stored in the session's side strip. |
-| `ready()` | The stored layout has loaded. |
-| `narrow()` | The viewport is under 768px. |
-| `side.opened(session)`, `side.toggle(session)` | The side region's state. |
-| `sidebar.opened()` | The inner sidebar preference that every side panel shares. |
-| `dock.opened(session)`, `dock.placement()` | The dock's state and whether it sits at the `"side"` or `"bottom"`. |
-| `scroll` | Scroll offsets stored per session and key. |
-| `settings(page?)`, `project(server, title)` | Opens Settings, or a project's directory picker and a new draft. |
+- `tab: "open"`, the default, selects the tab in the preview slot. `"preview"` makes it the new preview, `"append"` adds
+  it without selecting it, and `"select"` adds and selects it, keeping the preview.
+- `background: true` keeps the current view on narrow screens and opens the side region, for an action the user did
+  not start from the panel.
+- `state(key, session)` is `"closed"` when the tab is not in the strip, `"open"` when it is but is not selected,
+  `"active"` when it is selected with the side region closed, and `"visible"` when it is selected and on screen. A dock
+  is `"closed"` or `"visible"`.
+- `stored(session)` is this plugin's tab ids stored in the session's side strip.
+- `ready()` is `true` once the stored layout has loaded, and `narrow()` while the viewport is under 768px.
+- `sidebar.opened()` is the inner sidebar preference that every side panel shares.
+- `dock.placement()` is where the dock sits: at the `"side"` or the `"bottom"`.
+- `scroll` stores scroll offsets per session and key.
+- `settings(page?)` opens Settings. `project(server, title)` opens a project's directory picker and a new draft.
 
-| `open` option | Purpose |
-| --- | --- |
-| `tab` | `"open"` (default) selects the tab in the preview slot; `"preview"` makes it the new preview; `"append"` adds it without selecting it; `"select"` adds and selects it, keeping the preview. |
-| `background` | On narrow screens, keeps the current view and opens the side region, for an action the user did not start from the panel. |
+#### Reference
+
+```ts
+interface Layout {
+  open(key: string, session: SessionRef, options?: OpenOptions): void
+  close(key: string, session: SessionRef): void
+  toggle(key: string, session: SessionRef): void
+  state(key: string, session: SessionRef): "closed" | "open" | "active" | "visible"
+  stored(session: SessionRef): string[]
+  ready(): boolean
+  narrow(): boolean
+  side: {
+    opened(session: SessionRef): boolean
+    toggle(session: SessionRef): void
+  }
+  sidebar: {
+    opened(): boolean
+  }
+  dock: {
+    opened(session: SessionRef): boolean
+    placement(): "side" | "bottom"
+  }
+  scroll: {
+    get(session: SessionRef, key: string): { x: number; y: number } | undefined
+    set(session: SessionRef, key: string, value: { x: number; y: number }): void
+  }
+  settings(page?: string): void
+  project(server: string, title: string): void
+}
+
+interface OpenOptions {
+  tab?: "open" | "preview" | "append" | "select"
+  background?: boolean
+}
+```
 
 ### Sessions and the session screen
 
@@ -411,21 +676,94 @@ const file = ctx.screen.current()?.file
 if (session && file) void file.sync("README.md")
 ```
 
-| `MountedSession` field | Purpose |
-| --- | --- |
-| `key` | `<server id>\n<session id>`, unique across servers. Key per-session state by it. |
-| `id`, `server`, `tab` | The session's id, its `ServerRef`, and the key of the shell tab that owns it. |
-| `pending` | The server is still creating the session. |
-| `location`, `directory`, `local` | Where the session runs, its workspace directory, and whether that is the project root. |
-| `project`, `listedProject` | The session's project, and the sidebar project it belongs to. |
-| `visit` | A new object each time the session is routed. |
-| `background` | Shell commands and subagents the session moved to the background. |
+- `key` is `<server id>\n<session id>`, unique across servers. Key per-session state by it.
+- `tab` is the key of the shell tab that owns the session. `pending` is `true` while the server still creates it.
+- `directory` is the session's workspace directory, and `local` is `true` when that is the project root.
+- `listedProject` is the sidebar project the session belongs to.
+- `visit` is a new object each time the session is routed.
+- `background` lists the shell commands and subagents the session moved to the background.
+- `ctx.sessions.list()` returns the sessions of the open shell tabs.
+- The screen's `file` reads the workspace's files, and `comment` holds the line comments of the next prompt.
+  `composer` attaches parts to it; see [the next section](#attach-files-and-notes-to-the-composer).
 
-| Screen member | Purpose |
-| --- | --- |
-| `file` | The workspace's files: `root`, `resolve`, `get`, `sync`, `exists`, `search`, `tree`, `selection`, and `scroll`. |
-| `comment` | Line comments of the next prompt: `list`, `add`, `update`, `remove`, `focus`, and `active`. |
-| `composer` | The composer: `attach`, `update`, and `detach`. See below. |
+#### Reference
+
+```ts
+interface Sessions {
+  list(): SessionRef[]
+  current(): MountedSession | undefined
+}
+
+interface SessionRef {
+  key: string
+  id: string
+  tab: string
+  server: ServerRef
+  pending: boolean
+  location: LocationRef | undefined
+}
+
+interface MountedSession extends SessionRef {
+  visit: object
+  project: Project | undefined
+  listedProject: { worktree: string; name?: string; icon?: Project["icon"] } | undefined
+  directory: string
+  local: boolean
+  background: BackgroundTask[]
+}
+
+interface Screen {
+  current(): SessionScreen | undefined
+}
+
+interface SessionScreen {
+  file: Files
+  comment: Comments
+  composer: Composer
+}
+
+interface Files {
+  root: string
+  ready(): boolean
+  resolve(path: string): string
+  absolute(path: string): boolean
+  get(path: string): FileState | undefined
+  missing(path: string): boolean
+  sync(path: string, options?: { force?: boolean; silent?: boolean }): Promise<void>
+  exists(path: string): Promise<boolean>
+  search(query: string, options?: { kind?: "file" | "any"; limit?: number; signal?: AbortSignal }): Promise<string[]>
+  selection: {
+    get(path: string): LineRange | null | undefined
+    set(path: string, range: LineRange | null): void
+  }
+  scroll: {
+    get(path: string): { top?: number; left?: number }
+    set(path: string, value: { top?: number; left?: number }): void
+  }
+  tree: {
+    list(path: string): FileNode[]
+    state(path: string): { expanded: boolean; loaded?: boolean; loading?: boolean; error?: string } | undefined
+    sync(path: string, options?: { force?: boolean }): Promise<void>
+    expand(path: string, options?: { list?: boolean }): void
+    collapse(path: string): void
+  }
+}
+
+interface Comments {
+  list(file?: string): Comment[]
+  add(input: Omit<Comment, "id" | "time">): Comment
+  update(id: string, comment: string): void
+  remove(id: string): void
+  focus: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+  active: {
+    current(): { file: string; id: string } | null
+    set(value: { file: string; id: string } | null): void
+  }
+}
+```
 
 ### Attach files and notes to the composer
 
@@ -449,6 +787,40 @@ composer?.attach({
 
 - `update(commentID, { comment?, preview? })` changes an attached part; a note takes only a new `comment`.
 - `detach(commentID)` removes an attached part.
+- A note's `live` replaces its `subject` and `href` while the note stays in this app process, for references only this
+  process can resolve, such as a page element. A stored draft drops it.
+
+#### Reference
+
+```ts
+interface Composer {
+  attach(part: ComposerFile | ComposerNote): void
+  update(id: string, patch: { comment?: string; preview?: string }): void
+  detach(id: string): void
+}
+
+interface ComposerFile {
+  type: "file"
+  path: string
+  selection?: { startLine: number; endLine: number; startChar: number; endChar: number }
+  preview?: string
+  comment?: string
+  commentID?: string
+  commentOrigin?: "review" | "file"
+}
+
+interface ComposerNote {
+  type: "note"
+  origin: string
+  commentID: string
+  label: string
+  icon: IconName
+  subject: string
+  comment: string
+  href?: string
+  live?: { subject: string; href?: string }
+}
+```
 
 ### Servers and server events
 
@@ -465,17 +837,38 @@ createKeyed(
 )
 ```
 
-| `ServerRef` field | Purpose |
-| --- | --- |
-| `id`, `name`, `url` | The host key (`"sidecar"`, an http URL, or `<plugin id>:<id>`), its display name, and its base URL. |
-| `client` | The server's API client. |
-| `data` | The server's synced data (sessions, projects, …) and `on(type, handler)` for its events. Reactive. |
-| `local`, `builtin` | The server is local, and it is the app's own server. |
-| `compatible`, `connected` | The server's version works with this app, and its event connection is up. |
-| `password` | The HTTP basic password the user configured, if any. |
+- `id` is the host key: `"sidecar"`, an http URL, or `<plugin id>:<id>` for a [contributed server](#servers).
+- `data` is the server's synced data, such as sessions and projects, and `on(type, handler)` for its events. It is
+  reactive.
+- `builtin` is `true` for the app's own server.
+- `compatible` is `true` when the server's version works with this app, and `connected` while its event connection is
+  up.
+- `password` is the HTTP basic password the user configured, if any.
+- Read `client`, `data`, and `url` from the live `ServerRef` each time: a restarted server gets a new client under the
+  same id.
+- `ctx.servers.list()` returns the ids of the servers the app lists.
 
-Read `client`, `data`, and `url` from the live `ServerRef` each time: a restarted server gets a new client under the
-same id.
+#### Reference
+
+```ts
+interface Servers {
+  list(): string[]
+  get(id: string): ServerRef | undefined
+}
+
+interface ServerRef {
+  id: string
+  name: string
+  url: string
+  password?: string
+  client: OpenCodeClient
+  data: Data
+  local: boolean
+  builtin: boolean
+  compatible: boolean
+  connected: boolean
+}
+```
 
 ### Dialogs
 
@@ -486,7 +879,21 @@ it. The dialog also closes when its owning scope ends.
 const handle = ctx.dialogs.open((dialog) => <ConfirmDialog onDone={dialog.close} />)
 ```
 
-`ctx.dialogs.active()` is `true` while any dialog is open.
+- `replace: true` closes every open dialog first, including the host's and other plugins' dialogs.
+- `ctx.dialogs.active()` is `true` while any dialog is open.
+
+#### Reference
+
+```ts
+interface Dialogs {
+  open(render: (dialog: DialogHandle) => JSX.Element, options?: { replace?: boolean }): DialogHandle
+  active(): boolean
+}
+
+interface DialogHandle {
+  close(): void
+}
+```
 
 ### Keybinds
 
@@ -498,16 +905,100 @@ const chord = ctx.keybinds.keys("mod+k")
 const pressed = (event: KeyboardEvent) => ctx.keybinds.matches(`${ctx.id}.open`, event)
 ```
 
+- `keybind(command)` returns the display parts of the command's effective keybind, for example `["Ctrl", "K"]`. It is
+  empty when the command is unbound.
+- `keys(bind)` returns the display parts of a chord the app does not own, such as one a page handles itself.
+- `matches(command, event)` is `true` when the event matches the command's effective keybind.
+
+#### Reference
+
+```ts
+interface Keybinds {
+  keybind(command: string): string[]
+  keys(bind: string): string[]
+  matches(command: string, event: KeyboardEvent): boolean
+}
+```
+
+### System and environment
+
+`ctx.system` works on every platform. `ctx.desktop` adds desktop-only abilities and is `undefined` on the web.
+
+```ts
+const show = async (path: string) => {
+  if (ctx.desktop && (await ctx.desktop.reveal(path))) return
+  await ctx.system.copy(path)
+}
+```
+
+- `system.save` shows a save dialog on desktop and downloads on the web. It returns `false` when the user cancels the
+  dialog.
+- `system.openExternal` opens a URL in the system browser. For links inside the app, use `ctx.links.open`, which routes
+  a `Link` to its [link handler](#link-handlers).
+- `desktop.launch(path, app?)` opens a path with an app, or with the default app. `desktop.reveal(path)` shows it in the
+  file manager.
+- `ctx.embeds` renders a main-process web view in a window; see
+  [Embedded web views](/build/plugins/gui/main#embedded-web-views).
+- `ctx.locale` and `ctx.appearance` read the interface language, its writing direction, and the user's monospace font.
+- `ctx.router` reads the current route path and whether a route transition is in progress.
+- `ctx.workspaces.on("remove", handler)` runs when the user removes a workspace directory from a server, so you can
+  clean up stores scoped to it.
+
+#### Reference
+
+```ts
+interface System {
+  copy(text: string): Promise<void>
+  save(file: { name: string; content: string }): Promise<boolean>
+  openExternal(url: string): void
+}
+
+interface Desktop {
+  os: "macos" | "windows" | "linux"
+  window: string
+  zoom(): number
+  launch(path: string, app?: string): Promise<void>
+  reveal(path: string): Promise<boolean>
+  installed(app: string): Promise<boolean>
+  forceFocus(enabled: boolean): Promise<void>
+}
+
+interface Links {
+  open(link: Link): boolean
+  exists(link: Link): boolean | Promise<boolean>
+}
+
+interface Locale {
+  locale(): string
+  direction(): "ltr" | "rtl"
+  setDirection(direction: "ltr" | "rtl"): void
+}
+
+interface Appearance {
+  font(kind: "mono"): string
+}
+
+interface Router {
+  path(): string
+  routing(): boolean
+}
+
+interface Workspaces {
+  on(event: "remove", handler: (value: { server: string; directory: string }) => void): Cleanup
+}
+```
+
 ## Stored state
 
 Desktop windows load stored state over IPC, while the web reads `localStorage` at once. Declare stores in
 `Plugin.define({ stores })`, so the host loads them for you.
 
-| Declaration | Context shape | When it loads |
-| --- | --- | --- |
-| `Store.global(schema, initial, from?)` | `ctx.stores.name.value` (never `undefined`) | Before `setup` runs |
-| `Store.session(schema, initial, from?)` | `ctx.stores.name(session).value` (`T` or `undefined`) | When `session` mounts |
-| `Store.main(schema, initial, from?)` | `ctx.stores.name` in `main` only | Always loaded |
+- **`Store.global`** keeps one value for the app. It loads before `setup` runs, so `ctx.stores.name.value` is never
+  `undefined`.
+- **`Store.session`** keeps one value per session. It loads when the session mounts; `ctx.stores.name(session).value`
+  is `undefined` until then.
+- **`Store.main`** keeps one value for the app in the main process. Only `main` reads it, as `ctx.stores.name`; see
+  [Main context](/build/plugins/gui/main#main-context).
 
 Mutate a value in place with `update(draft => …)`, which must return nothing, or replace it with `set(next)`:
 
@@ -521,8 +1012,27 @@ ctx.stores.prefs.update((draft) => {
 
 - `ready()` is `true` once the value has loaded. Writes made before then wait and apply in call order.
 - `from` imports a value once from an older home, while the store holds none: a stored key such as
-  `"extension.acme.settings"`, or `{ key, pick }` for part of a shared key. Pass a list to try several homes, newest
+  `"plugin.acme.settings"`, or `{ key, pick }` for part of a shared key. Pass a list to try several homes, newest
   first.
+
+#### Reference
+
+```ts
+const Store: {
+  global(schema: Schema, initial: T, from?: StoreFrom | StoreFrom[]): StoreDeclaration
+  session(schema: Schema, initial: T, from?: StoreFrom | StoreFrom[]): StoreDeclaration
+  main(schema: Schema, initial: T, from?: MainStoreFrom | MainStoreFrom[]): MainStoreDeclaration
+}
+
+type StoreFrom = string | { key: string; sessions?: string; pick(value: unknown): unknown }
+
+interface Persisted<T> {
+  value: T
+  ready(): boolean
+  update(mutate: (draft: T) => undefined): void
+  set(next: T): void
+}
+```
 
 ### Runtime stores
 
@@ -546,15 +1056,31 @@ function DraftView(props: { readonly session: MountedSession }) {
 }
 ```
 
-| `scope` | Where the value lives |
-| --- | --- |
-| `"global"` | One value for the app. The default. |
-| `{ server, directory? }` | One value per server, or per workspace directory on it. |
-| `{ session }` | One value per session, opened again when the session moves to a new directory. |
-
+- `scope: "global"`, the default, keeps one value for the app.
+- `scope: { server, directory? }` keeps one value per server, or per workspace directory on it.
+- `scope: { session }` keeps one value per session, opened again when the session moves to a new directory.
 - A runtime store's `value` is `undefined` until it loads.
 - `ctx.storage.memory(key, { initial })` keeps window-local state that survives plugin reloads but not window reloads.
 - `ctx.storage.remove(key, { scope, from })` deletes the value, so the key reads as `initial` again.
+
+#### Reference
+
+```ts
+interface Storage {
+  store(key: string, options: StoreOptions): Persisted<T | undefined>
+  memory(key: string, options: { initial: T }): [Store<T>, (mutation: (draft: T) => void) => void]
+  remove(key: string, options?: { scope?: StorageScope; from?: StoreFrom | StoreFrom[] }): void
+}
+
+interface StoreOptions {
+  schema: Schema
+  initial: T
+  scope?: StorageScope
+  from?: StoreFrom | StoreFrom[]
+}
+
+type StorageScope = "global" | { server: string; directory?: string } | { session: SessionRef }
+```
 
 ## Reactive primitives
 
@@ -570,6 +1096,21 @@ Use the SDK's helpers instead.
 createKeyed(ctx.uses.updater, (updater) => void updater.on("check", () => checkNow()))
 ```
 
+- `otherwise` runs while the source has no key: a `Live` accessor that is not active, or a plain accessor whose value
+  is `undefined`, `null`, or `false`.
+- `equals` decides whether a plain accessor's new value is the same key, so `fn` does not run again. Use it when the
+  source builds a new object each time. A `Live` accessor always keys by generation.
+
+#### Reference
+
+```ts
+function createKeyed<T>(
+  source: () => Live<T> | T,
+  fn: (value: T) => void,
+  options?: { otherwise?(): void; equals?(previous: T, next: T): boolean },
+): void
+```
+
 ### createLatest
 
 `createLatest(source, (value, signal) => promise)` fetches whenever `source` changes, aborts stale requests, and never
@@ -580,11 +1121,18 @@ const active = createLatest(ctx.uses.awake, (awake, signal) => awake.screenActiv
 const awake = () => active.latest ?? false
 ```
 
-| Field | Value |
-| --- | --- |
-| `latest` | The last result, kept while a newer request runs. `undefined` before the first. |
-| `loading` | A request for the current value is in flight. |
-| `error` | The current request's rejection, if any. |
+- `latest` is the last result, kept while a newer request runs. It is `undefined` before the first.
+- `loading` is `true` while a request for the current value is in flight.
+- `error` is the current request's rejection, if any.
+
+#### Reference
+
+```ts
+function createLatest<S, T>(
+  source: () => Live<S> | S,
+  fetch: (value: S, signal: AbortSignal) => Promise<T>,
+): { latest: T | undefined; loading: boolean; error: unknown }
+```
 
 ### createVisitState
 
@@ -595,6 +1143,12 @@ leaves the session and returns.
 const [expanded, setExpanded] = createVisitState(false)
 ```
 
+#### Reference
+
+```ts
+function createVisitState<T>(initial: T): [value: () => T, set: (next: T) => void]
+```
+
 ### onIdle
 
 `onIdle(fn)` runs `fn` when the main thread is idle and returns a function that cancels it. Preload lazy chunks with it.
@@ -603,13 +1157,58 @@ const [expanded, setExpanded] = createVisitState(false)
 onCleanup(onIdle(() => void Page.preload()))
 ```
 
-### usePanel and useDrawer
-
-`usePanel()` reads the surrounding panel frame: `placement()`, `sidebar.opened()`, and `sidebar.toggle()`. `useDrawer()`
-returns the mobile drawer around a contribution, or `undefined` outside one.
+#### Reference
 
 ```ts
+function onIdle(fn: () => void): () => void
+```
+
+### usePanel and useDrawer
+
+`usePanel()` reads the surrounding panel frame, and throws outside a panel render. `useDrawer()` returns the mobile
+drawer around a contribution, or `undefined` outside one.
+
+```ts
+const panel = usePanel()
+const compact = () => panel.placement() === "mobile"
 const close = () => useDrawer()?.close()
+```
+
+- `placement()` is `"side"` in the side region or a dock beside the timeline, `"bottom"` in a dock below the timeline,
+  and `"mobile"` in a narrow-screen view.
+- `visible()` is `true` while the region is open and this tab is selected. `present()` stays `true` while the region
+  animates closed.
+- `reserve()` asks you to leave room at the end of a header for the host's region toggle.
+- `sidebar` is the inner sidebar preference that every side panel shares. A panel with a sidebar renders its own
+  toggle.
+- `drawer.open(view)` shows content in place of the drawer's view, with a back control.
+
+#### Reference
+
+```ts
+function usePanel(): PanelFrame
+function useDrawer(): Drawer | undefined
+
+interface PanelFrame {
+  visible(): boolean
+  present(): boolean
+  placement(): "side" | "bottom" | "mobile"
+  reserve(): boolean
+  animate(): boolean
+  open(): string[]
+  sidebar: {
+    opened(): boolean
+    width(): number
+    transition(): boolean
+    resize(width: number): void
+    toggle(): void
+  }
+}
+
+interface Drawer {
+  close(): void
+  open(view: { title: string; content: JSX.Element; trigger: HTMLElement }): void
+}
 ```
 
 ## Built-in contracts
@@ -632,11 +1231,49 @@ ctx.add(FileViewer, {
 })
 ```
 
-| Token | Kind | Members |
-| --- | --- | --- |
-| `FileTree` | Contract | `Tree(props)` and `List(props)`: a virtualized tree or list of workspace files with change markers and `onFileClick(path)`. |
-| `OpenInApp` | Contract | `Button(props)`: the desktop **Open in** button for a session's workspace. |
-| `FileViewer` | Registry | `kinds` it renders, an optional `problem(bytes)` check, and a `View` that receives `bytes`, `onDetails(details)`, and `onError(reason?)`. |
+- **`FileTree`** is a contract. `Tree` and `List` render a virtualized tree or list of workspace files with change
+  markers.
+- **`OpenInApp`** is a contract. `Button` is the desktop **Open in** button for a session's workspace.
+- **`FileViewer`** is a registry. A viewer lists the `kinds` it renders, can reject bytes with `problem`, and renders a
+  `View` that reports `onDetails` and `onError`.
+
+#### Reference
+
+```ts
+interface FileTree {
+  Tree(props: FileTreeProps): JSX.Element
+  List(props: FileListProps): JSX.Element
+}
+
+interface FileTreeProps {
+  screen: SessionScreen
+  session: MountedSession
+  allowed: string[]
+  kinds?: Map<string, ChangeKind>
+  active?: string
+  onFileClick(path: string): void
+}
+
+interface FileListProps {
+  screen: SessionScreen
+  session: MountedSession
+  files: string[]
+  kinds?: Map<string, ChangeKind>
+  active?: string
+  highlighted?: string
+  onFileClick(path: string): void
+}
+
+interface OpenInApp {
+  Button(props: { screen: SessionScreen; session: MountedSession }): JSX.Element
+}
+
+interface FileViewer {
+  kinds: ArtifactKind[]
+  problem?(bytes: Uint8Array): string | undefined
+  View: Component<{ bytes: Uint8Array; onDetails(details: string[]): void; onError(reason?: string): void }>
+}
+```
 
 ### Review changes
 
@@ -655,15 +1292,32 @@ const count = () => {
 }
 ```
 
-| Member | Purpose |
-| --- | --- |
-| `diffs(session)`, `ready(session)` | The current review mode's diffs, and whether they have loaded. Reactive. |
-| `kinds(session)` | The `ChangeKind` of each changed file and directory, by path. |
-| `active(session)` | The file the review panel shows. |
-| `details(session)` | The session directory's uncommitted changes, independent of the review mode. |
-| `focus(session, path)`, `open(session)` | Shows a file, or all changes, in the review panel. |
-| `watch(screen, source)` | Keeps a view's changes loaded while it shows them: `"tree"`, `"files"`, or `"details"`. |
-| `onReveal(listener)` | Runs when review reveals a change, for example from a composer comment. |
+- `diffs(session)` is the current review mode's diffs, and `ready(session)` is `true` once they have loaded. Both are
+  reactive.
+- `kinds(session)` maps each changed file and directory to its `ChangeKind`.
+- `active(session)` is the file the review panel shows.
+- `details(session)` is the session directory's uncommitted changes, whatever the review mode.
+- `focus(session, path)` shows a file in the review panel, and `open(session)` shows all changes.
+- `watch(screen, source)` keeps a view's changes loaded while it shows them. It returns a function that stops watching.
+- `onReveal(listener)` runs when review reveals a change, for example from a composer comment.
+
+#### Reference
+
+```ts
+interface Changes {
+  diffs(session: SessionRef): FileDiffInfo[]
+  ready(session: SessionRef): boolean
+  kinds(session: SessionRef): Map<string, ChangeKind>
+  active(session: SessionRef): string | undefined
+  details(session: SessionRef): FileDiffInfo[] | undefined
+  focus(session: SessionRef, path: string): void
+  open(session: SessionRef): void
+  watch(screen: SessionScreen, source: "tree" | "files" | "details"): () => void
+  onReveal(listener: () => void): () => void
+}
+
+type ChangeKind = "add" | "del" | "mix"
+```
 
 ### Browser
 
@@ -680,12 +1334,21 @@ const url = "http://localhost:3000"
 if (session && live.status === "active" && live.value.canOpen(session, url)) live.value.open(session, url)
 ```
 
-| Member | Purpose |
-| --- | --- |
-| `attached(session)` | The session has a browser pane. |
-| `canOpen(session, path?)` | A workspace file or http(s) URL can open in the pane. |
-| `open(session, url)` | Opens a URL as a browser tab in the session's side panel. |
-| `openFile(session, path)` | Opens a workspace file as a `file://` tab. |
+- `attached(session)` is `true` when the session has a browser pane.
+- `canOpen(session, path?)` is `true` when a workspace file or an http(s) URL can open in the pane.
+- `open(session, url)` opens a URL as a browser tab in the session's side panel.
+- `openFile(session, path)` opens a workspace file as a `file://` tab.
+
+#### Reference
+
+```ts
+interface Browser {
+  attached(session: SessionRef): boolean
+  canOpen(session: SessionRef, path?: string): boolean
+  open(session: SessionRef, url: string): void
+  openFile(session: SessionRef, path: string): void
+}
+```
 
 ### Updater
 
@@ -700,9 +1363,24 @@ const live = ctx.uses.updater()
 if (live.status === "active" && live.value.state()?.status === "ready") void live.value.install()
 ```
 
-| Member | Purpose |
-| --- | --- |
-| `state()` | The app-wide `UpdaterState`: `"disabled"`, `"idle"`, `"checking"`, `"downloading"`, `"ready"`, `"download-required"`, `"up-to-date"`, `"installing"`, or `"error"`. |
-| `check()` | Checks for an update and resolves with the new state. |
-| `install()` | Restarts into a staged update, or opens the installer download. |
-| `on("check", listener)` | The app menu asks the focused window to check, with in-app feedback. |
+- `state()` is the updater's state, the same in every window. It is `undefined` until the first snapshot arrives.
+- `ready` means `version` is staged, and `install()` restarts into it. `download-required` means `version` needs a
+  manual download, and `install()` opens it.
+- `check()` checks for an update and resolves with the new state.
+- The `check` event fires when the app menu asks the focused window to check, with in-app feedback.
+
+#### Reference
+
+```ts
+interface UpdaterClient {
+  state(): UpdaterState | undefined
+  check(options?: { signal?: AbortSignal }): Promise<UpdaterState>
+  install(options?: { signal?: AbortSignal }): Promise<void>
+  on(event: "check", listener: () => void): Cleanup
+}
+
+type UpdaterState =
+  | { status: "disabled" | "idle" | "checking" | "up-to-date" }
+  | { status: "downloading" | "ready" | "download-required" | "installing"; version: string }
+  | { status: "error"; message: string }
+```
