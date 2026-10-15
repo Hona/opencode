@@ -117,13 +117,16 @@ export const docsSections: DocsSection[] = [
         items: [{ title: "Intro", slug: "build" }],
       },
       {
-        title: "Plugins",
+        title: "Server plugins",
         items: [
           { title: "Overview", slug: "build/plugins" },
           { title: "RPC", slug: "build/plugins/rpc" },
-          { title: "CLI", slug: "build/plugins/cli" },
           { title: "Migrate from V1", slug: "build/plugins/migrate-v1" },
         ],
+      },
+      {
+        title: "TUI plugins",
+        items: [{ title: "Overview", slug: "build/plugins/cli" }],
       },
       {
         title: "GUI plugins",
