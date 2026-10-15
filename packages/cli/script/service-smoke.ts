@@ -84,6 +84,21 @@ try {
   if (!(await exitsWithin(winner, 10_000))) throw new Error("Compiled service did not stop")
   for (let attempt = 0; attempt < 200 && (await Bun.file(registration).exists()); attempt++) await Bun.sleep(25)
   if (await Bun.file(registration).exists()) throw new Error("Compiled service registration was not removed")
+
+  // Windows ends a session the way taskkill without /F closes a process: by messaging its windows.
+  if (process.platform === "win32" && !nodeBuild) {
+    const service = spawnService()
+    await waitForRegistration()
+    // The service opens its window just after it registers.
+    for (let attempt = 0; attempt < 200; attempt++) {
+      if (Bun.spawnSync(["taskkill", "/PID", String(service.pid)]).exitCode === 0) break
+      await Bun.sleep(25)
+    }
+    if (!(await exitsWithin(service, 10_000))) throw new Error("Compiled service ignored a Windows close request")
+    if (service.exitCode !== 0) throw new Error(`Compiled service exited with ${service.exitCode} when asked to close`)
+    if (await Bun.file(registration).exists())
+      throw new Error("Compiled service kept its registration when asked to close")
+  }
 } catch (cause) {
   failure = cause
 } finally {

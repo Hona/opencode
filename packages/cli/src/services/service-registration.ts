@@ -1,15 +1,18 @@
 export * as ServiceRegistration from "./service-registration"
 
 import { Service, type Info } from "@opencode/client/effect/service"
+import { readFileSync, rmSync } from "node:fs"
 import path from "node:path"
-import { Effect, FileSystem, Schedule, Schema } from "effect"
+import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/http"
 import { NetAddress } from "effect/net"
 import { OPENCODE_VERSION } from "../version"
+import { WindowsShutdown } from "./windows-shutdown"
 
 const infoJson = Schema.fromJsonString(Service.Info)
 const encodeInfo = Schema.encodeEffect(infoJson)
 const decodeInfo = Schema.decodeUnknownEffect(infoJson)
+const decodeInfoOption = Schema.decodeUnknownOption(infoJson)
 
 export const register = Effect.fnUntraced(function* (options: {
   readonly address: NetAddress.SocketAddress
@@ -37,6 +40,20 @@ export const register = Effect.fnUntraced(function* (options: {
     found.pid === info.pid &&
     found.password === info.password
   yield* fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(Effect.andThen(fs.rename(temp, options.file)))
+  const runFork = Effect.runForkWith(yield* Effect.context<never>())
+  yield* WindowsShutdown.watch({
+    close: () => runFork(options.shutdown),
+    end: () => {
+      // Windows may terminate the process as soon as this returns, before the shutdown below
+      // reaches the asynchronous release, so the registration is removed here first.
+      Option.liftThrowable(() => readFileSync(options.file, "utf8"))().pipe(
+        Option.flatMap(decodeInfoOption),
+        Option.filter(owns),
+        Option.flatMap(Option.liftThrowable(() => rmSync(options.file, { force: true }))),
+      )
+      runFork(options.shutdown)
+    },
+  })
   yield* current.pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("managed service registration check failed; shutting down", {

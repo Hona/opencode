@@ -16,6 +16,13 @@
     "./run": "./src/run/index.ts",
     "./server-process": "./src/server-process.ts"
   },
+  "imports": {
+    "#windows-shutdown": {
+      "types": "./src/services/windows-shutdown.bun.ts",
+      "bun": "./src/services/windows-shutdown.bun.ts",
+      "default": "./src/services/windows-shutdown.noop.ts"
+    }
+  },
   "scripts": {
     "build": "bun run script/build.ts",
     "build:node": "bun run script/build-node.ts",

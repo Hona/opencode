@@ -3,6 +3,7 @@ import { validateRoutes } from "@opentunnel/client/effect"
 import { Service, type Info } from "@opencode/client/effect/service"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_VERSION } from "../src/version"
+import { dlopen } from "bun:ffi"
 import { expect, test } from "bun:test"
 import { Deferred, Effect, FileSystem, Schedule, Schema } from "effect"
 import { NetAddress } from "effect/net"
@@ -321,6 +322,45 @@ test("clean managed service shutdown removes its registration", async () => {
     await stopManagedService(service)
   }
 }, 30_000)
+
+const windows = process.platform === "win32" ? test : test.skip
+
+windows(
+  "a close request from taskkill shuts the managed service down cleanly",
+  async () => {
+    const service = await startManagedService("opencode-service-taskkill-")
+    try {
+      await serviceWindow(service.owner.pid)
+      expect(Bun.spawnSync(["taskkill", "/PID", String(service.owner.pid)]).exitCode).toBe(0)
+      expect(await waitForExit(service.owner)).toBe(true)
+      expect(service.owner.exitCode).toBe(0)
+      expect(await Bun.file(service.registration).exists()).toBe(false)
+    } finally {
+      await stopManagedService(service)
+    }
+  },
+  30_000,
+)
+
+windows(
+  "the managed service releases its registration before acknowledging the end of the Windows session",
+  async () => {
+    const service = await startManagedService("opencode-service-session-end-")
+    try {
+      const window = await serviceWindow(service.owner.pid)
+      // Agreeing to end the session changes nothing: another application can still cancel it.
+      expect(sendWindowMessage(window, WM_QUERYENDSESSION, 0)).toBe(1n)
+      expect(await Bun.file(service.registration).exists()).toBe(true)
+      sendWindowMessage(window, WM_ENDSESSION, 1)
+      expect(await Bun.file(service.registration).exists()).toBe(false)
+      expect(await waitForExit(service.owner)).toBe(true)
+      expect(service.owner.exitCode).toBe(0)
+    } finally {
+      await stopManagedService(service)
+    }
+  },
+  30_000,
+)
 
 test("concurrent service processes elect one server", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-election-"))
@@ -805,6 +845,52 @@ async function stopManagedService(service: Awaited<ReturnType<typeof startManage
 
 function waitForExit(process: Bun.Subprocess, timeout = 10_000) {
   return Promise.race([process.exited.then(() => true), Bun.sleep(timeout).then(() => false)])
+}
+
+const WM_QUERYENDSESSION = 0x0011
+const WM_ENDSESSION = 0x0016
+
+// Finds the hidden window a managed service opens just after it registers, by class and owning
+// process. Window handles stay plain integers here; zero means none.
+async function serviceWindow(pid: number) {
+  const user32 = dlopen("user32.dll", {
+    FindWindowExW: { args: ["u64", "u64", "ptr", "ptr"], returns: "u64" },
+    GetWindowThreadProcessId: { args: ["u64", "ptr"], returns: "u32" },
+  })
+  const name = Buffer.from("OpenCodeService\0", "utf16le")
+  const owner = new Uint32Array(1)
+  const find = (after: number | bigint): number | bigint => {
+    const window = user32.symbols.FindWindowExW(0, after, name, null)
+    if (!window) return 0
+    user32.symbols.GetWindowThreadProcessId(window, owner)
+    return owner[0] === pid ? window : find(window)
+  }
+  try {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const window = find(0)
+      if (window) return window
+      await Bun.sleep(25)
+    }
+    throw new Error(`Managed service ${pid} did not open its window`)
+  } finally {
+    user32.close()
+  }
+}
+
+// Sends a message the way Windows does when it ends the session, and returns the window's answer.
+function sendWindowMessage(window: number | bigint, message: number, wparam: number) {
+  const user32 = dlopen("user32.dll", {
+    SendMessageTimeoutW: { args: ["u64", "u32", "u64", "i64", "u32", "u32", "ptr"], returns: "i64" },
+  })
+  const result = new BigUint64Array(1)
+  try {
+    // SMTO_ABORTIFHUNG: fail instead of waiting on a window that stopped processing messages.
+    if (!user32.symbols.SendMessageTimeoutW(window, message, wparam, 0, 0x2, 10_000, result))
+      throw new Error(`Managed service did not answer window message ${message}`)
+    return result[0]
+  } finally {
+    user32.close()
+  }
 }
 
 async function expectPortAvailable(port: number) {
