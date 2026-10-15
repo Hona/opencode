@@ -1,4 +1,5 @@
 import { defineMain } from "storybook-solidjs-vite"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import tailwindcss from "@tailwindcss/vite"
@@ -10,6 +11,22 @@ const sessionUi = path.resolve(here, "../../session-ui")
 const app = path.resolve(here, "../../app/src")
 const extensions = path.resolve(here, "../../gui-extensions/src")
 const mocks = path.resolve(here, "./mocks")
+
+// Component tests import real modules by URL (`source("../src/…")`, `new URL("./x.fixture.tsx", import.meta.url)`),
+// past the mock aliases. Read those paths from the specs so the dependency optimizer crawls exactly what they load.
+const packages = path.resolve(here, "../..")
+const componentTestModules = readdirSync(packages)
+  .map((name) => path.join(packages, name, "component-tests"))
+  .filter((dir) => existsSync(dir))
+  .flatMap((dir) =>
+    readdirSync(dir, { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".spec.ts"))
+      .flatMap((file) =>
+        Array.from(readFileSync(path.join(dir, file), "utf8").matchAll(/["'](\.{1,2}\/[^"']+\.tsx?)["']/g), (match) =>
+          path.resolve(dir, path.dirname(file), match[1]!),
+        ),
+      ),
+  )
 
 export default defineMain({
   framework: {
@@ -32,26 +49,17 @@ export default defineMain({
   ],
   async viteFinal(config) {
     const { mergeConfig, searchForWorkspaceRoot } = await import("vite")
-    const entry = (glob: string) =>
-      path.relative(config.root ?? process.cwd(), path.resolve(here, glob)).replaceAll("\\", "/")
+    const entry = (file: string) =>
+      path.relative(config.root ?? process.cwd(), path.resolve(here, file)).replaceAll("\\", "/")
     const merged = mergeConfig(config, {
       plugins: [tailwindcss(), playgroundCss()],
       optimizeDeps: {
         // Without Storybook's optimizer plugin (removed below), Vite finds dependencies on first import and reloads
-        // the page, aborting component tests mid-import. Crawl the stories and every module those tests import first.
+        // the page, aborting component tests mid-import. Crawl the stories, the workers (the scan does not follow
+        // `new Worker(new URL(…))`) and the modules component tests load.
         entries: [
-          entry("../../ui/src/**/*.stories.tsx"),
-          entry("../../session-ui/src/**/*.stories.tsx"),
-          entry("../../app/src/**/*.stories.tsx"),
-          entry("../../gui-extensions/src/**/*.stories.tsx"),
-          entry("../../*/component-tests/*.fixture.tsx"),
-          entry("../../gui-extensions/src/browser/panel.fixture.tsx"),
-          entry("../../gui-extensions/src/{renderer,sdk/index,browser/index,file/index}.ts"),
-          entry("../../gui-extensions/src/{browser/panel,browser/renderer,file/renderer}.tsx"),
-          entry("../../app/src/runtime/extension/{embeds,host,panels,render}.tsx"),
-          entry(
-            "../../app/src/{runtime/i18n/language,runtime/platform/platform,settings/model,shell/commands/command}.tsx",
-          ),
+          entry("../../{ui,session-ui,app,gui-extensions}/src/**/*.{stories.tsx,worker.ts}"),
+          ...new Set(componentTestModules.map(entry)),
         ],
       },
       resolve: {
