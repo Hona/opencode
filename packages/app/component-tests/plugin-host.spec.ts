@@ -833,10 +833,10 @@ story("settings show where each part of a plugin from the config is turned off",
   }, fixture)
   const settings = page.getByRole("region", { name: "Plugins", exact: true })
   await settings.screenshot({ path: info.outputPath("plugin-parts.png") })
-  // Only plugins from the config list their parts; only one that exports `./tui` lists the TUI's switch.
+  // Only plugins from the config tag their other parts, and one note says how to turn those off.
   await expect(settings.getByText("Server", { exact: true })).toHaveCount(2)
-  await expect(settings.getByText('Add "-acme" to plugins in cli.json to turn off the TUI part.')).toBeVisible()
   await expect(settings.getByText("TUI", { exact: true })).toHaveCount(1)
+  await expect(settings.getByText(/Switches turn off only a plugin's desktop UI/)).toHaveCount(1)
   // A built-in always runs, so it has no switch; the switches carry on and off without a status label.
   await expect(settings.getByRole("switch")).toHaveCount(2)
   await expect(settings.getByRole("switch", { name: "terminal" })).toHaveCount(0)

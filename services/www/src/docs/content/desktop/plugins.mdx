@@ -31,8 +31,8 @@ You can also open the command palette (**Cmd+K** / **Ctrl+K**), search for `Plug
 Every row in **Settings > Plugins** shows the plugin's ID and a **Reload** button. A row for a plugin from your config also has a switch. Built-in rows carry a **Built-in** label instead, because built-in plugins always run.
 
 ```text
-terminal  Built-in   Reload
-acme                 Reload  [on]
+terminal  Built-in     Reload
+acme      Server TUI   Reload  [on]
 ```
 
 - **Switch:** turns the plugin's desktop UI on or off in all desktop windows. The setting persists across restarts. The server and TUI parts keep running; see [Other parts of a plugin](#other-parts-of-a-plugin).
@@ -44,18 +44,14 @@ If the desktop app no longer knows a plugin's ID, for example because the plugin
 
 ### Other parts of a plugin
 
-A plugin from your config can also run on the server and in the TUI. Its row lists each part and the setting that turns it off:
+A plugin from your config can also run on the server and in the TUI. Its row tags those parts, and its switch leaves them running:
 
 ```text
-acme                                                                          Reload  [on]
-Desktop   This switch turns off the desktop UI only. The other parts keep running.
-Server    Running. Add "-acme" to plugins in your global opencode.json to turn off the server part and the desktop UI.
-TUI       Add "-acme" to plugins in cli.json to turn off the TUI part.
+acme      Server TUI   Reload  [on]
 ```
 
-- **Desktop:** the row's switch.
-- **Server:** `"-acme"` in `plugins` in your global [`opencode.json(c)`](/plugins). The desktop UI loads only for plugins that the server runs, so it turns off too.
-- **TUI:** `"-acme"` in `plugins` in [`cli.json`](/cli/plugins). The row lists this part only when the plugin exports `./tui`.
+- **Server:** add `"-acme"` to `plugins` in your global [`opencode.json(c)`](/plugins). The desktop UI loads only for plugins that the server runs, so it turns off too.
+- **TUI:** add `"-acme"` to `plugins` in [`cli.json`](/cli/plugins). A row has the **TUI** tag only when the plugin exports `./tui`.
 
 ## Add plugins
 

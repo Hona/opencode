@@ -87,28 +87,26 @@ export function PluginsSettings() {
                           {language.t("settings.plugins.builtin")}
                         </span>
                       </Show>
+                      {/* The parts besides the desktop UI that this row's switch leaves running. */}
+                      <Show when={itemOf(definition.id)?.builtin === false}>
+                        <span class="text-11-regular text-v2-text-text-muted">
+                          {language.t("settings.plugins.part.server")}
+                        </span>
+                      </Show>
+                      <Show when={itemOf(definition.id)?.tui}>
+                        <span class="text-11-regular text-v2-text-text-muted">
+                          {language.t("settings.plugins.part.tui")}
+                        </span>
+                      </Show>
                     </span>
                   }
                   description={
-                    <div class="flex flex-col gap-2">
-                      <Show when={status(definition.id)}>{(label) => <span>{label()}</span>}</Show>
+                    <>
+                      {status(definition.id)}
                       <Show when={errorOf(definition.id)}>
-                        {(error) => <pre class="whitespace-pre-wrap text-text-danger-base">{error()}</pre>}
+                        {(error) => <pre class="mt-1 whitespace-pre-wrap text-text-danger-base">{error()}</pre>}
                       </Show>
-                      {/* A plugin from the config has parts this switch does not turn off; each row names its own. */}
-                      <Show when={itemOf(definition.id)?.builtin === false}>
-                        <dl class="grid grid-cols-[auto_1fr] gap-x-3">
-                          <dt class="text-v2-text-text-base">{language.t("settings.plugins.part.desktop")}</dt>
-                          <dd>{language.t("settings.plugins.part.desktop.description")}</dd>
-                          <dt class="text-v2-text-text-base">{language.t("settings.plugins.part.server")}</dt>
-                          <dd>{language.t("settings.plugins.part.server.description", { id: definition.id })}</dd>
-                          <Show when={itemOf(definition.id)?.tui}>
-                            <dt class="text-v2-text-text-base">{language.t("settings.plugins.part.tui")}</dt>
-                            <dd>{language.t("settings.plugins.part.tui.description", { id: definition.id })}</dd>
-                          </Show>
-                        </dl>
-                      </Show>
-                    </div>
+                    </>
                   }
                 >
                   <div class="flex items-center gap-3">
@@ -139,6 +137,9 @@ export function PluginsSettings() {
               )}
             </For>
           </SettingsList>
+          <Show when={installed.list().some((item) => !item.builtin)}>
+            <p class="text-11-regular text-v2-text-text-muted">{language.t("settings.plugins.parts.note")}</p>
+          </Show>
         </section>
       </div>
     </>
