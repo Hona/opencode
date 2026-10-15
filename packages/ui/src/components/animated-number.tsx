@@ -53,6 +53,7 @@ function Digit(props: { value: number; direction: 1 | -1 }) {
       <span data-slot="animated-number-static">{props.value}</span>
       <span
         data-slot="animated-number-strip"
+        aria-hidden="true"
         onTransitionEnd={() => {
           setState("animating", false)
           setState("step", (value) => normalize(value) + 10)
@@ -62,7 +63,8 @@ function Digit(props: { value: number; direction: 1 | -1 }) {
           "--animated-number-duration": `var(--tool-motion-odometer-ms, ${DURATION}ms)`,
         }}
       >
-        <For each={TRACK}>{(value) => <span data-slot="animated-number-cell">{value}</span>}</For>
+        {/* Generated digits keep the strip out of the number's text content. */}
+        <For each={TRACK}>{(value) => <span data-slot="animated-number-cell" data-digit={value} />}</For>
       </span>
     </span>
   )

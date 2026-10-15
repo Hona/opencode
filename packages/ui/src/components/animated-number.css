@@ -56,6 +56,10 @@
     line-height: 1em;
   }
 
+  [data-slot="animated-number-cell"]::before {
+    content: attr(data-digit);
+  }
+
   [data-slot="animated-number-digit"][data-animating="true"] [data-slot="animated-number-static"] {
     visibility: hidden;
   }
@@ -63,8 +67,8 @@
   [data-slot="animated-number-strip"] {
     display: inline-flex;
     flex-direction: column;
-    margin-top: calc(var(--animated-number-offset, 10) * -1em);
-    transition-property: margin-top;
+    transform: translateY(calc(var(--animated-number-offset, 10) * -1em));
+    transition-property: transform;
     transition-duration: var(--animated-number-duration, 560ms);
     transition-timing-function: var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
   }
