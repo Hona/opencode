@@ -159,15 +159,26 @@ export interface EnableState {
 }
 
 /**
- * Resolves desktop enable state: the row saved under the plugin's id, or enabled when there is none. Both hosts use
- * this rule, including a window's preload snapshot.
+ * Resolves desktop enable state. A built-in always runs, whatever row is saved under its id; any other plugin follows
+ * the row saved under its id, or is enabled when there is none. Both hosts use this rule, including a window's preload
+ * snapshot.
  *
- * @param id - The plugin's id.
+ * @param plugin - The plugin, and whether it ships with the app.
  * @param state - Explicit saved rows, or the manager's resolved list.
  * @returns Whether the plugin is enabled.
  */
-export function pluginEnabled(id: string, state: readonly EnableState[]) {
-  return state.find((item) => item.id === id)?.enabled ?? true
+export function pluginEnabled(
+  plugin: {
+    /** The plugin's id. */
+    readonly id: string
+    /** Ships with the app. */
+    readonly builtin: boolean
+  },
+  state: readonly EnableState[],
+) {
+  if (plugin.builtin) return true
+
+  return state.find((item) => item.id === plugin.id)?.enabled ?? true
 }
 
 export { pluginSharedModules, pluginWindowModules, type PluginModule } from "./modules.js"

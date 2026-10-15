@@ -837,6 +837,10 @@ story("settings show where each part of a plugin from the config is turned off",
   await expect(settings.getByText("Server", { exact: true })).toHaveCount(2)
   await expect(settings.getByText('Add "-acme" to plugins in cli.json to turn off the TUI part.')).toBeVisible()
   await expect(settings.getByText("TUI", { exact: true })).toHaveCount(1)
+  // A built-in always runs, so it has no switch; the switches carry on and off without a status label.
+  await expect(settings.getByRole("switch")).toHaveCount(2)
+  await expect(settings.getByRole("switch", { name: "terminal" })).toHaveCount(0)
+  await expect(settings.getByText("Active", { exact: true })).toHaveCount(0)
 })
 
 story("blocked chains expose their own reason and recover regardless of definition order", async ({ page }) => {

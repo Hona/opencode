@@ -12,17 +12,17 @@ test.each([
   { name: "another plugin's setting", rows: [{ id: "other", enabled: false }], expected: true },
 ])("both hosts resolve $name from real database rows, and a new setting wins", (input) => {
   const database = openDatabase(":memory:")
-  const manager = createManager(database.db)
+  const manager = createManager(database.db, [])
   input.rows.forEach((row) => database.db.insert(plugin).values(row).run())
 
   expect(manager.enabled("current")).toBe(input.expected)
-  expect(pluginEnabled("current", readEnableState(database.db.$client))).toBe(input.expected)
+  expect(pluginEnabled({ id: "current", builtin: false }, readEnableState(database.db.$client))).toBe(input.expected)
 
   const before = database.db.select().from(plugin).all()
 
   manager.setEnabled("current", !input.expected)
   expect(manager.enabled("current")).toBe(!input.expected)
-  expect(pluginEnabled("current", readEnableState(database.db.$client))).toBe(!input.expected)
+  expect(pluginEnabled({ id: "current", builtin: false }, readEnableState(database.db.$client))).toBe(!input.expected)
   expect(
     database.db
       .select()
@@ -30,5 +30,15 @@ test.each([
       .all()
       .filter((row) => row.id !== "current"),
   ).toEqual(before.filter((row) => row.id !== "current"))
+  database.close()
+})
+
+test("both hosts run a built-in whatever setting is saved under its id", () => {
+  const database = openDatabase(":memory:")
+  const manager = createManager(database.db, ["current"])
+  manager.setEnabled("current", false)
+
+  expect(manager.enabled("current")).toBe(true)
+  expect(pluginEnabled({ id: "current", builtin: true }, readEnableState(database.db.$client))).toBe(true)
   database.close()
 })

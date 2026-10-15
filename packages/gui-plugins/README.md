@@ -407,7 +407,7 @@ servers: Store.main(Schema.Array(SshConfig), [], { settings: "ssh.servers" }),
 - `Storage.remove(key, { from })` reads as `initial` again and never imports `from` again.
 - Renaming a plugin that has shipped moves three things: stored keys (`from`), command ids (the keybind rename map in `packages/app/src/settings/keybinds/migration.ts`), and panel keys (`Panel.legacy`). Never drop user data. The enable setting starts again under the new id.
 
-The enable setting saved under a plugin's id wins; with none, the plugin is enabled. Both desktop hosts use this rule. A failed startup snapshot is unknown, so the window waits for the manager list rather than running disabled plugins.
+A built-in always runs, whatever setting is saved under its id, and Settings › Plugins has no switch for it. For any other plugin, the setting saved under its id wins; with none, the plugin is enabled. Both desktop hosts use this rule (`pluginEnabled`). A failed startup snapshot is unknown, so the window waits for the manager list rather than running disabled plugins.
 
 The enable preference is separate from activation: an enabled plugin with an unavailable hard dependency is `blocked`. The window publishes disabled providers before starting enabled entries, so consumers settle as blocked regardless of declaration order.
 

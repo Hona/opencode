@@ -7,11 +7,12 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import { showToast } from "@/shell/notifications/toast"
+import { builtins } from "./builtins"
 import { usePluginHost } from "./host"
 import { createInstalled } from "./installed"
 import { useReservedPlugins } from "./root"
 
-/** Every plugin of this desktop window, built-in or from the app's own server, with enable and reload controls. */
+/** Every plugin of this desktop window, built-in or from the app's own server, with reload and enable controls. */
 export function PluginsSettings() {
   const language = useLanguage()
   const host = usePluginHost()
@@ -21,22 +22,24 @@ export function PluginsSettings() {
 
   const itemOf = (id: string) => installed.list().find((item) => item.id === id)
 
+  // Built-ins always run, so they have no switch.
+  const builtin = (id: string) => builtins.some((definition) => definition.id === id)
+
   const enabled = (id: string) => itemOf(id)?.enabled ?? true
 
   // Why the window entry or main's entry failed; either fails the plugin.
   const errorOf = (id: string) => host.state.failures[id]?.error ?? itemOf(id)?.error
 
+  // The switch already shows whether a plugin runs; only the states it cannot show get a label.
   const status = (id: string) => {
     const value = host.state.status[id] ?? "loading"
 
     if (value === "failed" || (value === "active" && itemOf(id)?.error))
       return language.t("settings.plugins.status.failed")
 
-    if (value === "active") return language.t("settings.plugins.status.active")
-
-    if (value === "disabled") return language.t("settings.plugins.status.disabled")
-
     if (value === "blocked") return language.t("settings.plugins.status.blocked")
+
+    if (value === "active" || value === "disabled") return undefined
 
     return language.t("settings.plugins.status.loading")
   }
@@ -79,7 +82,7 @@ export function PluginsSettings() {
                   title={
                     <span class="flex items-center gap-2">
                       <bdi dir="ltr">{definition.id}</bdi>
-                      <Show when={itemOf(definition.id)?.builtin}>
+                      <Show when={builtin(definition.id)}>
                         <span class="text-11-regular text-v2-text-text-muted">
                           {language.t("settings.plugins.builtin")}
                         </span>
@@ -87,14 +90,14 @@ export function PluginsSettings() {
                     </span>
                   }
                   description={
-                    <>
-                      {status(definition.id)}
+                    <div class="flex flex-col gap-2">
+                      <Show when={status(definition.id)}>{(label) => <span>{label()}</span>}</Show>
                       <Show when={errorOf(definition.id)}>
-                        {(error) => <pre class="mt-1 whitespace-pre-wrap text-text-danger-base">{error()}</pre>}
+                        {(error) => <pre class="whitespace-pre-wrap text-text-danger-base">{error()}</pre>}
                       </Show>
                       {/* A plugin from the config has parts this switch does not turn off; each row names its own. */}
                       <Show when={itemOf(definition.id)?.builtin === false}>
-                        <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3">
+                        <dl class="grid grid-cols-[auto_1fr] gap-x-3">
                           <dt class="text-v2-text-text-base">{language.t("settings.plugins.part.desktop")}</dt>
                           <dd>{language.t("settings.plugins.part.desktop.description")}</dd>
                           <dt class="text-v2-text-text-base">{language.t("settings.plugins.part.server")}</dt>
@@ -105,16 +108,22 @@ export function PluginsSettings() {
                           </Show>
                         </dl>
                       </Show>
-                    </>
+                    </div>
                   }
                 >
                   <div class="flex items-center gap-3">
                     <Button size="small" variant="ghost" onClick={() => reload(definition.id)}>
                       {language.t("settings.plugins.reload")}
                     </Button>
-                    <Switch hideLabel checked={enabled(definition.id)} onChange={(next) => toggle(definition.id, next)}>
-                      {definition.id}
-                    </Switch>
+                    <Show when={!builtin(definition.id)}>
+                      <Switch
+                        hideLabel
+                        checked={enabled(definition.id)}
+                        onChange={(next) => toggle(definition.id, next)}
+                      >
+                        {definition.id}
+                      </Switch>
+                    </Show>
                   </div>
                 </SettingsRow>
               )}

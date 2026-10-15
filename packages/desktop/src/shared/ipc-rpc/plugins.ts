@@ -21,6 +21,8 @@ export const PluginErrorCode = Schema.Literals([
   // The plugin manager.
   "notFound",
   "invalidModule",
+  // A built-in always runs, so it cannot be turned on or off.
+  "builtin",
 ])
 
 export type PluginErrorCode = typeof PluginErrorCode.Type

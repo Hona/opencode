@@ -74,7 +74,13 @@ export function PluginRoot(props: ParentProps) {
 
     if (!state) return undefined
 
-    return new Set(definitions().flatMap((definition) => (pluginEnabled(definition.id, state) ? [] : [definition.id])))
+    return new Set(
+      definitions().flatMap((definition) =>
+        pluginEnabled({ id: definition.id, builtin: builtins.some((builtin) => builtin.id === definition.id) }, state)
+          ? []
+          : [definition.id],
+      ),
+    )
   })
 
   const failed = (id: string) => installed.list().some((item) => item.id === id && item.error !== undefined)
