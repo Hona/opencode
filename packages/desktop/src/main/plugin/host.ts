@@ -168,7 +168,10 @@ export function createHost(input: {
   const definitions: readonly Entry[] = builtins
   const local = definitions.filter((definition) => runsOn(definition, os))
 
-  const manager = createManager(input.db)
+  const manager = createManager(
+    input.db,
+    definitions.map((definition) => definition.id),
+  )
 
   const embeds = createEmbeds()
   // Plugins on the app's own server that ship a `./gui` bundle, each at the bundle main last read and runs. Main alone
@@ -884,12 +887,18 @@ export function createHost(input: {
     list: installed,
     async enable(id: string) {
       if (!known(id)) throw new PluginError("notFound")
+
+      if (definitions.some((definition) => definition.id === id)) throw new PluginError("builtin")
+
       manager.setEnabled(id, true)
       changed()
       await lifecycle.activate(id)
     },
     async disable(id: string) {
       if (!known(id)) throw new PluginError("notFound")
+
+      if (definitions.some((definition) => definition.id === id)) throw new PluginError("builtin")
+
       manager.setEnabled(id, false)
       await lifecycle.deactivate(id)
       changed()

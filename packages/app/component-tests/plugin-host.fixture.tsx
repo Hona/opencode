@@ -256,7 +256,9 @@ export function mountPlugins(input: {
       if (!state) return undefined
 
       return new Set(
-        definitions().flatMap((definition) => (pluginEnabled(definition.id, state) ? [] : [definition.id])),
+        definitions().flatMap((definition) =>
+          pluginEnabled({ id: definition.id, builtin: false }, state) ? [] : [definition.id],
+        ),
       )
     })
 

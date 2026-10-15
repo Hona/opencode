@@ -1,14 +1,14 @@
 ---
 title: "Plugins"
-description: "Toggle, reload, and troubleshoot plugins in the OpenCode Desktop interface, and add new ones from opencode.json."
+description: "See, reload, and troubleshoot plugins in the OpenCode Desktop interface, and add new ones from opencode.json."
 ---
 
 OpenCode Desktop lists the plugins that run in its interface under **Settings > Plugins**. The page shows the built-in plugins that ship with the app and the GUI parts of your [plugins](/plugins#desktop).
 
-- **Built-in plugins** ship with the app and carry a **Built-in** label. You cannot remove them, but you can turn them off.
-- **Your plugins** come from `opencode.json(c)`, when the plugin package exports `./gui`. Remove the plugin from `opencode.json(c)` to remove it.
+- **Built-in plugins** ship with the app, carry a **Built-in** label, and always run.
+- **Your plugins** come from `opencode.json(c)`, when the plugin package exports `./gui`. Turn one off with its switch, or remove the plugin from `opencode.json(c)` to remove it.
 
-Built-in plugins provide the app's workspace features, such as the [terminal](/desktop/terminal), [review](/desktop/review) panel, and [browser](/desktop/browser). They are enabled by default.
+Built-in plugins provide the app's workspace features, such as the [terminal](/desktop/terminal), [review](/desktop/review) panel, and [browser](/desktop/browser).
 
 ## Open Settings > Plugins
 
@@ -26,16 +26,16 @@ You can also open the command palette (**Cmd+K** / **Ctrl+K**), search for `Plug
   server.
 </Callout>
 
-## Enable, disable, and reload
+## Turn off and reload
 
-Every row in **Settings > Plugins** shows the plugin's ID, its current status, a **Reload** button, and an enable switch. Built-in rows also carry a **Built-in** label; rows from installed plugins have no label.
+Every row in **Settings > Plugins** shows the plugin's ID and a **Reload** button. A row for a plugin from your config also has a switch. Built-in rows carry a **Built-in** label instead, because built-in plugins always run.
 
 ```text
-terminal  Built-in   Active    Reload  [on]
-acme                 Active    Reload  [on]
+terminal  Built-in   Reload
+acme                 Reload  [on]
 ```
 
-- **Switch:** turns the plugin's desktop UI on or off in all desktop windows. The setting persists across restarts. For a plugin from your config, the server and TUI parts keep running; see [Other parts of a plugin](#other-parts-of-a-plugin).
+- **Switch:** turns the plugin's desktop UI on or off in all desktop windows. The setting persists across restarts. The server and TUI parts keep running; see [Other parts of a plugin](#other-parts-of-a-plugin).
 - **Reload:** reloads the plugin in every window and in the main process, and clears any recorded failure. If the main process reload fails, the last working revision stays active.
 
 When you disable a plugin, the host immediately withdraws all of its commands, panels, slots, titlebar items, native menu items, and settings pages in a single frame.
@@ -47,7 +47,7 @@ If the desktop app no longer knows a plugin's ID, for example because the plugin
 A plugin from your config can also run on the server and in the TUI. Its row lists each part and the setting that turns it off:
 
 ```text
-acme      Active                                                              Reload  [on]
+acme                                                                          Reload  [on]
 Desktop   This switch turns off the desktop UI only. The other parts keep running.
 Server    Running. Add "-acme" to plugins in your global opencode.json to turn off the server part and the desktop UI.
 TUI       Add "-acme" to plugins in cli.json to turn off the TUI part.
@@ -90,11 +90,9 @@ opencode plugin remove opencode-acme
 
 ## Plugin statuses
 
-Each plugin reports its live state in the current window:
+A row shows a status when its plugin is not running normally in the current window:
 
-- **Active:** the plugin's setup completed and its contributions are live.
 - **Loading:** the plugin is loading its bundle, or waiting for its stored state or the plugins it requires.
-- **Disabled:** the plugin is turned off in Settings.
 - **Blocked:** a plugin it requires is off, failed, or blocked itself. The plugin resumes when that plugin runs again.
 - **Failed:** the plugin's bundle failed to load, its setup threw an error, or one of its effects crashed.
 
@@ -102,7 +100,7 @@ If a plugin fails during setup or while rendering a contribution, the error stac
 
 ## Built-in plugin IDs
 
-All 13 built-in plugins are enabled by default. `wsl` runs on Windows only; all other built-ins run on macOS, Windows, and Linux.
+All 13 built-in plugins always run. `wsl` runs on Windows only; all other built-ins run on macOS, Windows, and Linux.
 
 - `context`: the context usage ring, the token breakdown tab, and session JSON export.
 - `btw`: the `/btw` side-question slash command and its answer tabs.
