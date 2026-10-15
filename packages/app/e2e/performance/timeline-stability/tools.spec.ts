@@ -91,12 +91,17 @@ test.describe("timeline tool state stability", () => {
       )
     }
 
-    for (const [index, id] of ["skill", "webfetch", "custom", "subagent", "websearch"].entries()) {
-      const key = id as (typeof ids)[number]
-      const metadata = key === "subagent" ? { sessionID: childID } : key === "websearch" ? { provider: "exa" } : {}
-      const output = key === "websearch" ? "Result https://example.com/result" : "Completed"
+    const completions = {
+      skill: { metadata: {}, output: "Completed" },
+      webfetch: { metadata: {}, output: "Completed" },
+      custom: { metadata: {}, output: "Completed" },
+      subagent: { metadata: { sessionID: childID }, output: "Completed" },
+      websearch: { metadata: { provider: "exa" }, output: "Result https://example.com/result" },
+    }
+
+    for (const [index, key] of (["skill", "webfetch", "custom", "subagent", "websearch"] as const).entries()) {
       await timeline.send(
-        partUpdated(toolPart(`prt_state_${key}`, names[key], "completed", inputs[key], { metadata, output })),
+        partUpdated(toolPart(`prt_state_${key}`, names[key], "completed", inputs[key], completions[key])),
         [110, 70, 280, 130, 420][index],
       )
     }

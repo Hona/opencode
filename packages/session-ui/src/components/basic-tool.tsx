@@ -11,6 +11,7 @@ import {
   type Accessor,
   type JSX,
 } from "solid-js"
+import { Predicate } from "effect"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "@opencode/ui/collapsible"
@@ -27,13 +28,8 @@ export type TriggerTitle = {
   action?: JSX.Element
 }
 
-const isTriggerTitle = (val: unknown): val is TriggerTitle => {
-  if (typeof val !== "object" || val === null) return false
-
-  if (typeof Node !== "undefined" && val instanceof Node) return false
-
-  return "title" in val && typeof val.title === "string"
-}
+const isTriggerTitle = (val: unknown): val is TriggerTitle =>
+  Predicate.isObject(val) && !("Node" in globalThis && val instanceof Node) && Predicate.isString(val.title)
 
 export interface BasicToolProps {
   icon: IconProps["name"]
@@ -118,13 +114,19 @@ export function BasicTool(props: BasicToolProps) {
   const triggerContent = createMemo(() => {
     const value = props.trigger
 
-    return typeof value === "function" ? value(open) : value
+    return Predicate.isFunction(value) ? value(open) : value
   })
 
   const triggerTitle = createMemo(() => {
     const value = triggerContent()
 
     return isTriggerTitle(value) ? value : undefined
+  })
+
+  const triggerElement = createMemo(() => {
+    const value = triggerContent()
+
+    return isTriggerTitle(value) ? undefined : value
   })
 
   let cancelReady: (() => void) | undefined
@@ -249,7 +251,7 @@ export function BasicTool(props: BasicToolProps) {
                 </div>
               )}
             </Match>
-            <Match when={true}>{triggerContent() as JSX.Element}</Match>
+            <Match when={true}>{triggerElement()}</Match>
           </Switch>
         </div>
       </div>
@@ -321,36 +323,28 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-function label(input: Record<string, unknown> | undefined) {
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- MCP and plugin tools report arbitrary JSON input.
+type ToolInput = Record<string, unknown>
+
+function label(input: ToolInput | undefined) {
   const keys = ["description", "query", "url", "path", "pattern", "name"]
 
-  return keys.map((key) => input?.[key]).find((value): value is string => typeof value === "string" && value.length > 0)
+  return keys.map((key) => input?.[key]).find((value): value is string => Predicate.isString(value) && value.length > 0)
 }
 
-function args(input: Record<string, unknown> | undefined) {
+function args(input: ToolInput | undefined) {
   if (!input) return []
   const skip = new Set(["description", "query", "url", "path", "pattern", "name"])
 
   return Object.entries(input)
     .filter(([key]) => !skip.has(key))
-    .flatMap(([key, value]) => {
-      if (typeof value === "string") return [`${key}=${value}`]
-
-      if (typeof value === "number") return [`${key}=${value}`]
-
-      if (typeof value === "boolean") return [`${key}=${value}`]
-
-      return []
-    })
+    .flatMap(([key, value]) =>
+      Predicate.isString(value) || Predicate.isNumber(value) || Predicate.isBoolean(value) ? [`${key}=${value}`] : [],
+    )
     .slice(0, 3)
 }
 
-export function GenericTool(props: {
-  tool: string
-  status?: string
-  hideDetails?: boolean
-  input?: Record<string, unknown>
-}) {
+export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean; input?: ToolInput }) {
   const i18n = useI18n()
 
   return (
