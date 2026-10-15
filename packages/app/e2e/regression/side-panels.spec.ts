@@ -109,7 +109,7 @@ test("terminal stacks under review by default and spans the bottom when configur
     ),
   ]
 
-  await openSession(page, { name: "SideStack", pty: {}, vcsDiff: diffs })
+  const { session } = await openSession(page, { name: "SideStack", pty: {}, vcsDiff: diffs })
   const toggle = page.getByRole("button", { name: "Toggle review" })
   const reviewPanel = page.locator("#review-panel")
   const terminalPanel = page.locator("#terminal-panel")
@@ -163,13 +163,30 @@ test("terminal stacks under review by default and spans the bottom when configur
   expect(Math.abs(closing.terminalBottom - stacked.terminalBottom)).toBeLessThanOrEqual(1)
   expect(closing.anchor).toBeLessThanOrEqual(8)
   expect(closing.terminalGap).toBeLessThanOrEqual(1)
+  expect(closing.reviewOverlap).toBeLessThanOrEqual(1)
 
   await toggle.click()
   await expect(reviewPanel).toBeVisible()
   await expectMarked(review)
   await expectTreeSentinel(page)
 
-  // Hiding the terminal mid-motion: both surfaces fill their regions and the clipped terminal keeps its size.
+  // Panels restored by a reload skip their entrance animation, and must still move together when the terminal hides.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (key) => JSON.parse(localStorage.getItem("opencode.window.browser.dat:tabs.panes") ?? "{}")[key],
+        tabKey(session.id),
+      ),
+    )
+    .toMatchObject({ review: true, terminal: true })
+  await page.reload()
+  await expect(reviewPanel).toBeVisible()
+  await expect(terminal).toBeVisible()
+  await expectTreeSentinel(page)
+  await mark(terminal)
+
+  // Hiding the terminal mid-motion: both surfaces fill their regions, the review never runs under the gap, and the
+  // clipped terminal keeps its size.
   const open = await stackGeometry(page)
   await holdTransitions(page)
   await page.keyboard.press("Control+Backquote")
@@ -180,6 +197,7 @@ test("terminal stacks under review by default and spans the bottom when configur
   expect(hiding.terminalRegion).toBeLessThan(open.terminalRegion - 1)
   expect(hiding.terminalRegion).toBeGreaterThan(1)
   expect(hiding.reviewGap).toBeLessThanOrEqual(1)
+  expect(hiding.reviewOverlap).toBeLessThanOrEqual(1)
   expect(hiding.terminalGap).toBeLessThanOrEqual(1)
   expect(Math.abs(hiding.content.width - open.content.width)).toBeLessThanOrEqual(1)
   expect(Math.abs(hiding.content.height - open.content.height)).toBeLessThanOrEqual(1)
@@ -403,6 +421,7 @@ async function stackGeometry(page: Page, progress?: number) {
 
     const box = (selector: string) => document.querySelector(selector)?.getBoundingClientRect()
     const reviewRegion = box('[data-slot="session-side-region"]')!
+    const gap = box('[data-slot="session-side-panel-gap"]')!
     const terminalRegion = box('[data-slot="session-side-terminal-region"]')!
     const review = box("#review-panel")
     const terminal = box("#terminal-panel")!
@@ -414,6 +433,8 @@ async function stackGeometry(page: Page, progress?: number) {
       terminalBottom: terminal.bottom,
       anchor: Math.abs(terminal.top - content.top),
       reviewGap: review ? Math.abs(reviewRegion.height - review.height) : 0,
+      // The gap paints over the review region, so any overlap hides the review's bottom corners.
+      reviewOverlap: reviewRegion.bottom - gap.top,
       terminalGap: Math.abs(terminalRegion.height - terminal.height),
       content: { width: content.width, height: content.height },
     }

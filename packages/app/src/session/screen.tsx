@@ -172,6 +172,9 @@ function SessionScreenContent(props: {
     if (bottomDockVisible()) setStore("bottomDockCached", true)
 
     if (!sideVisible()) setStore("sideHeightMotion", false)
+
+    // A side panel restored without its entrance animation never fires the animationend that enables height motion.
+    if (sideVisible() && !sidePresence.animate()) setStore("sideHeightMotion", true)
   })
   createEffect(() => {
     if (!isDesktop() || screen.dock.bottom()) setStore("sideDockPresent", false)
@@ -486,13 +489,13 @@ function SessionScreenContent(props: {
                   </Show>
                 </div>
                 <div class="absolute start-0 bottom-0 flex flex-col" style={{ width: screen.side.contentWidth() }}>
+                  {/* The gap moves with both regions, so together they always fill the column and the review's
+                      bottom corners are never covered. */}
                   <div
                     data-slot="session-side-panel-gap"
                     classList={{
-                      "relative z-0 shrink-0 overflow-visible bg-v2-background-bg-deep transition-[height] duration-[40ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none": true,
-                      "delay-0": !screen.side.gap.closing(),
-                      "delay-[200ms]": screen.side.gap.closing(),
-                      "transition-none": !regionAnimating(),
+                      "relative z-0 shrink-0 overflow-visible bg-v2-background-bg-deep transition-[height] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none": true,
+                      "transition-none": screen.size.active() || !store.sideHeightMotion || !regionAnimating(),
                     }}
                     style={{ height: screen.side.gap.height() }}
                     onPointerDown={() => screen.size.start()}
