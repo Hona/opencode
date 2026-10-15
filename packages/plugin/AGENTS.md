@@ -6,3 +6,4 @@
 - Plugin domains add only the additional functions that make sense in the plugin context.
 - The GUI SDK never loads in the server or the TUI, so `runtime-modules.ts` skips `gui/` and the CLI bundle does not grow.
 - `src/gui/` follows `packages/gui-plugins/AGENTS.md`: the built-ins there are its main users, and `bun run lint` checks its TSDoc (`script/sdk-docs.ts`). Run `bun run generate` here after the app's icon catalog changes.
+- `src/gui/host.ts` (`@opencode/plugin/gui/host`) is the app's and desktop's internal protocol, for workspace imports only: `tsconfig.build.json` leaves it out of `dist` and `script/publish.ts` exports it as `null`. Keep public SDK modules from importing it.
