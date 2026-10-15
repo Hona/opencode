@@ -293,6 +293,23 @@ for (const direction of ["ltr", "rtl"] as const) {
         return actions.y + actions.height / 2 - (button.y + button.height / 2)
       })
       .toBe(0)
+
+    // Toggling the terminal under the review leaves the review header and the toggle in place.
+    const header = async () => {
+      const box = await page.locator('[data-slot="session-side-panel-actions"]').boundingBox()
+
+      return box && { y: box.y, height: box.height }
+    }
+
+    const stacked = await header()
+
+    for (const visible of [false, true]) {
+      await page.keyboard.press("Control+Backquote")
+      await expect(terminal).toBeVisible({ visible })
+      await expect.poll(header).toEqual(stacked)
+      await expect.poll(() => toggle.boundingBox()).toEqual(position)
+    }
+
     await toggle.press("Enter")
     await expect(toggle).toHaveAttribute("aria-expanded", "false")
     await expect(toggle).toBeFocused()
@@ -321,6 +338,7 @@ async function expectTreeSentinel(page: Page) {
 // Pauses each CSS transition as it starts, so a real toggle can be measured mid-motion.
 function holdTransitions(page: Page) {
   return page.evaluate(() => {
+    // SAFETY: only these two helpers write this optional global, in the declared shape.
     const host = window as Window & { e2eHold?: { active: boolean } }
 
     if (!host.e2eHold) {
@@ -341,7 +359,9 @@ function holdTransitions(page: Page) {
 
 function releaseTransitions(page: Page) {
   return page.evaluate(() => {
-    ;(window as Window & { e2eHold?: { active: boolean } }).e2eHold!.active = false
+    // SAFETY: `holdTransitions` installed this global, in this shape, before any release.
+    const host = window as Window & { e2eHold?: { active: boolean } }
+    host.e2eHold!.active = false
     document
       .getAnimations()
       .filter((item) => item instanceof CSSTransition && item.playState === "paused")
@@ -359,7 +379,7 @@ async function stackGeometry(page: Page, progress?: number) {
           (item) =>
             item instanceof CSSTransition && item.playState === "paused" && item.transitionProperty === "height",
         )
-        .map((item) => ((item.effect as KeyframeEffect).target as Element).getAttribute("data-slot")),
+        .map((item) => (item.effect instanceof KeyframeEffect ? item.effect.target?.getAttribute("data-slot") : null)),
     )
 
   if (progress !== undefined) {
@@ -371,9 +391,10 @@ async function stackGeometry(page: Page, progress?: number) {
       .getAnimations()
       .filter((item): item is CSSTransition => item instanceof CSSTransition && item.playState === "paused")
 
-    const region = transitions.find(
-      (item) => ((item.effect as KeyframeEffect).target as Element).getAttribute("data-slot") === "session-side-region",
-    )
+    const slot = (item: CSSTransition) =>
+      item.effect instanceof KeyframeEffect ? item.effect.target?.getAttribute("data-slot") : null
+
+    const region = transitions.find((item) => slot(item) === "session-side-region")
 
     if (progress !== undefined) {
       const time = Number(region!.effect!.getTiming().duration) * progress
@@ -388,7 +409,7 @@ async function stackGeometry(page: Page, progress?: number) {
     const content = box('[data-slot="terminal-panel-content"]')!
 
     return {
-      moving: transitions.map((item) => ((item.effect as KeyframeEffect).target as Element).getAttribute("data-slot")),
+      moving: transitions.map(slot),
       terminalRegion: terminalRegion.height,
       terminalBottom: terminal.bottom,
       anchor: Math.abs(terminal.top - content.top),
@@ -413,8 +434,8 @@ async function expectTerminalControlsAligned(terminal: Locator, toggle: Locator)
     .poll(async () => {
       const centers = await Promise.all(
         [terminal.getByRole("button", { name: "New terminal", exact: true }), toggle].map((button) =>
-          button.locator("svg").evaluate((element) => {
-            const svg = element as SVGSVGElement
+          button.locator("svg").evaluate((svg) => {
+            if (!(svg instanceof SVGGraphicsElement)) return Number.NaN
             const path = svg.getBBox()
 
             return new DOMPoint(path.x + path.width / 2, path.y + path.height / 2).matrixTransform(svg.getScreenCTM()!)
