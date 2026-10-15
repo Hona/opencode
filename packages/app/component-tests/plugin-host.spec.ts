@@ -794,6 +794,51 @@ story("developer settings show a blocked hard dependency instead of loading fore
   await expect(settings.getByText("Loading", { exact: true })).toHaveCount(0)
 })
 
+story("settings show where each part of a plugin from the config is turned off", async ({ page }, info) => {
+  await page.evaluate(async (fixture) => {
+    const { mountPlugins, until } = await import(fixture)
+
+    const installed: Installed[] = [
+      { id: "terminal", builtin: true, enabled: true },
+      { id: "acme", builtin: false, enabled: true, tui: true },
+      { id: "notes", builtin: false, enabled: false, tui: false },
+    ]
+
+    const bridge: Bridge = {
+      packaged: false,
+      call: async () => undefined,
+      subscribe: async () => ({ available: false }),
+      on: () => () => {},
+      embed() {},
+      capture: async () => undefined,
+      runMenubarItem() {},
+      configure() {},
+      pluginGuis: async () => ({ plugins: [], reserved: [] }),
+      manager: {
+        initial: Promise.resolve(installed),
+        list: async () => installed,
+        enable: async () => {},
+        disable: async () => {},
+        reload: async () => {},
+      },
+    }
+
+    const host = mountPlugins({
+      settings: true,
+      bridge,
+      definitions: installed.map((item) => ({ id: item.id, windowEntry: async () => ({ default: () => {} }) })),
+    })
+
+    await until(() => !!host.container.textContent?.includes("cli.json"))
+  }, fixture)
+  const settings = page.getByRole("region", { name: "Plugins", exact: true })
+  await settings.screenshot({ path: info.outputPath("plugin-parts.png") })
+  // Only plugins from the config list their parts; only one that exports `./tui` lists the TUI's switch.
+  await expect(settings.getByText("Server", { exact: true })).toHaveCount(2)
+  await expect(settings.getByText('Add "-acme" to plugins in cli.json to turn off the TUI part.')).toBeVisible()
+  await expect(settings.getByText("TUI", { exact: true })).toHaveCount(1)
+})
+
 story("blocked chains expose their own reason and recover regardless of definition order", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { Contract, mountPlugins, until } = await import(fixture)

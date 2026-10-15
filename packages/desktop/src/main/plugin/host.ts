@@ -90,9 +90,13 @@ type ListedPlugin = {
     | { readonly ok: false; readonly cause: unknown }
 }
 
-/** What main keeps of the plugin listing besides the plugins: the ids a built-in claims, and the follow of the server. */
+/**
+ * What main keeps of the plugin listing besides the plugins: the ids a built-in claims, the plugins that also export
+ * `./tui` (Settings › Plugins shows that part's switch), and the follow of the server.
+ */
 type Inventory = {
   reserved: readonly string[]
+  tui: ReadonlySet<string>
   /** Aborts the current follow of the app's own server. */
   watch?: AbortController
   /** Stops following the server's connections. */
@@ -171,7 +175,7 @@ export function createHost(input: {
   // lists and reads them, from that server first-hand; windows load what main sends.
   const plugins = new Map<string, ListedPlugin>()
   // The ids of plugins a built-in claims, and the follow of the app's own server.
-  const inventory: Inventory = { reserved: [] }
+  const inventory: Inventory = { reserved: [], tui: new Set() }
   const entries = new Map<string, Contribution>()
   const ipcs = new Map<string, Provider>()
   // Each live instance's catalog and messages, so a locale change reaches them.
@@ -412,13 +416,14 @@ export function createHost(input: {
 
     const shipped = listed.filter(shipsPluginGui)
     const reserved = shipped.flatMap((plugin) => (pluginIdAvailable(plugin.id, definitions) ? [] : [plugin.id]))
+    const tui = new Set(shipped.flatMap((plugin) => (plugin.features.tui ? [plugin.id] : [])))
 
     const read = await Promise.all(
       shipped.filter((plugin) => !reserved.includes(plugin.id)).map((plugin) => readPlugin(client, plugin.id)),
     )
 
     if (status.disposed) return
-    applyPlugins(new Map(read.flatMap((entry) => (entry ? [entry] : []))), reserved)
+    applyPlugins(new Map(read.flatMap((entry) => (entry ? [entry] : []))), reserved, tui)
   }
 
   // Reads a plugin's bundle and evaluates each new revision once. A read that fails keeps the bundle main runs, or
@@ -447,7 +452,11 @@ export function createHost(input: {
 
   // Starts, reloads and stops plugins' `main` setups to match a listing, and sends windows the new set: a new bundle
   // revision reloads its plugin.
-  const applyPlugins = (next: ReadonlyMap<string, ListedPlugin>, reserved: readonly string[]) => {
+  const applyPlugins = (
+    next: ReadonlyMap<string, ListedPlugin>,
+    reserved: readonly string[],
+    tui: ReadonlySet<string>,
+  ) => {
     const removed = [...plugins.keys()].filter((id) => !next.has(id))
 
     const changes = [...next].flatMap(([id, plugin]) => {
@@ -458,10 +467,17 @@ export function createHost(input: {
       return [{ id, plugin, previous }]
     })
 
-    if (removed.length === 0 && changes.length === 0 && reserved.join("\n") === inventory.reserved.join("\n")) return
+    if (
+      removed.length === 0 &&
+      changes.length === 0 &&
+      reserved.join("\n") === inventory.reserved.join("\n") &&
+      [...tui].join("\n") === [...inventory.tui].join("\n")
+    )
+      return
     removed.forEach((id) => plugins.delete(id))
     changes.forEach((change) => plugins.set(change.id, change.plugin))
     inventory.reserved = reserved
+    inventory.tui = tui
     changed()
     broadcast(new PluginGuisChanged(pluginGuis()))
     removed.forEach((id) => void lifecycle.deactivate(id, () => lifecycle.forget(id)))
@@ -739,6 +755,7 @@ export function createHost(input: {
       id,
       builtin: false,
       enabled: manager.enabled(id),
+      tui: inventory.tui.has(id),
       ...failure(lifecycle.failure(id)),
     })),
   ]

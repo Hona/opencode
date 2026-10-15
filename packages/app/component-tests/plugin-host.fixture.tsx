@@ -214,6 +214,7 @@ export function mountPlugins(input: {
 
   const platform: Platform = {
     platform: "desktop",
+    plugins: input.bridge,
     windowID: "plugin-host-fixture",
     openExternal: () => undefined,
     openDirectoryPickerDialog: async () => null,
@@ -287,11 +288,13 @@ export function mountPlugins(input: {
 
   const dispose = render(
     () => (
-      <LanguageProvider locale="en">
-        <DialogProvider>
-          <MountedHost />
-        </DialogProvider>
-      </LanguageProvider>
+      <PlatformProvider value={platform}>
+        <LanguageProvider locale="en">
+          <DialogProvider>
+            <MountedHost />
+          </DialogProvider>
+        </LanguageProvider>
+      </PlatformProvider>
     ),
     container,
   )

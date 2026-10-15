@@ -62,6 +62,7 @@ export const PluginInstalled = Schema.Struct({
   builtin: Schema.Boolean,
   enabled: Schema.Boolean,
   error: Schema.optionalKey(Schema.String),
+  tui: Schema.optionalKey(Schema.Boolean),
 })
 
 export type PluginInstalled = typeof PluginInstalled.Type
