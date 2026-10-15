@@ -47,10 +47,10 @@ export default Plugin.define({
 
 A GUI plugin can run in two processes:
 
-| Setup | Runs | Does | Reference |
-| --- | --- | --- | --- |
-| `setup` | In every desktop app window | Contributes panels, commands, settings pages, slots, server sources, link handlers, and styles | [Window SDK](/build/plugins/gui/window) |
-| `main` | Once, in the Electron main process | Provides typed `Ipc` contracts, native menu items, `WebContentsView` embeds, and Node and Electron integrations | [Main process & IPC](/build/plugins/gui/main) |
+- **`setup`** runs in every desktop app window. It contributes panels, commands, settings pages, slots, server sources,
+  link handlers, and styles. See [Window SDK](/build/plugins/gui/window).
+- **`main`** runs once, in the Electron main process. It provides typed `Ipc` contracts, native menu items,
+  `WebContentsView` embeds, and Node and Electron integrations. See [Main process & IPC](/build/plugins/gui/main).
 
 ## Anatomy of a GUI plugin
 
@@ -103,21 +103,44 @@ export const definition = Plugin.define({
 })
 ```
 
-| Field | Purpose | Context access |
-| --- | --- | --- |
-| `id` | Must equal your server plugin's id; a different id fails the plugin. Prefixes every id the plugin creates: commands (`<id>.<command>`), panel keys (`<id>:<tab>`), stored keys (`extension.<id>.<key>`, the literal stored key), and contract ids. | `ctx.id` |
-| `os` | Restricts the plugin to `"macos"`, `"windows"`, or `"linux"`. Omit it to run on every OS. A plugin that lists an OS does not run on the web. | — |
-| `provides` | `Contract` tokens the window setup provides and `Ipc` tokens the main setup provides. | `ctx.provide(token, impl)` and `ctx.uses.<key>()` |
-| `uses` | Optional dependencies from other plugins. Setup still runs when a provider is disabled or unavailable. | `ctx.uses.<key>()` returns `Live<T>` |
-| `requires` | Hard dependencies. Setup runs only while every required token is active, and restarts when one restarts. | `ctx.requires.<key>` returns `T` |
-| `stores` | Declared stored state: `Store.global`, `Store.session`, or `Store.main`. | `ctx.stores.<key>` |
-| `i18n` | Copy by locale. Write every locale inline; a plugin cannot load locales on demand. | `ctx.t(key, params)`, `ctx.plural(key, count)` |
-| `setup` | The window setup. | — |
-| `main` | The main-process setup. | — |
-
+- `id` must equal your server plugin's id; a different id fails the plugin. It prefixes every id the plugin creates:
+  commands (`<id>.<command>`), panel keys (`<id>:<tab>`), stored keys (`plugin.<id>.<key>`), and contract ids. Read it
+  as `ctx.id`.
+- `os` restricts the plugin to some operating systems. Omit it to run on every OS. A plugin that lists an OS does not
+  run on the web.
+- `provides` lists the `Contract` tokens the window setup provides and the `Ipc` tokens `main` provides, with
+  `ctx.provide(token, impl)`.
+- `uses` lists optional dependencies from other plugins. `ctx.uses.<key>()` returns a [`Live<T>`](#live-dependencies-and-failure-handling),
+  and setup still runs when a provider is off.
+- `requires` lists hard dependencies. `ctx.requires.<key>` returns `T`. Setup runs only while every required token is
+  active, and restarts when one restarts.
+- `stores` declares [stored state](/build/plugins/gui/window#stored-state). Read it as `ctx.stores.<key>`.
+- `i18n` holds copy by locale; write every locale inline. Read it with `ctx.t(key, params)` and
+  `ctx.plural(key, count)`.
 - Define `setup`, `main`, or both. A GUI without either fails to load.
 - Without setups, `Plugin.define` returns the declarations as a `Plugin.Declarations`, so setups in other files can be
   typed from them. `Plugin.Definition` is the type of the full definition.
+
+#### Reference
+
+```ts
+interface Declarations {
+  id: string
+  os?: ("macos" | "windows" | "linux")[]
+  provides?: Record<string, Contract | Ipc>
+  uses?: Record<string, Contract | Ipc>
+  requires?: Record<string, Contract | Ipc>
+  stores?: Record<string, StoreDeclaration>
+  i18n?: { en: Messages; [locale: string]: Messages }
+}
+
+interface Definition extends Declarations {
+  setup?(ctx: Context): Cleanup | void
+  main?(ctx: MainContext): Cleanup | void | Promise<Cleanup | void>
+}
+
+type Cleanup = () => void | Promise<void>
+```
 
 ## Shared context
 
@@ -172,15 +195,22 @@ ctx.add(Command, {
 if (!ctx.app.packaged) console.log(`Acme on ${ctx.app.name} ${ctx.app.version} (${ctx.app.channel})`)
 ```
 
-| Property | Value |
-| --- | --- |
-| `name` | `"opencode"`, as in a server plugin's `ctx.app.name`. |
-| `version` | The app version, for example `2.0.20`. |
-| `channel` | `"local"`, `"dev"`, `"beta"`, or `"prod"`. |
-| `platform` | `"desktop"` in the Electron app and in `main`; `"web"` in a browser tab. |
-| `packaged` | `true` when the desktop app runs packaged. Always `false` on the web. |
+- `name` is `"opencode"`, as in a server plugin's `ctx.app.name`.
+- `platform` is `"desktop"` in the Electron app and in `main`, and `"web"` in a browser tab.
+- `packaged` is `true` when the desktop app runs packaged. It is always `false` on the web.
+- Server plugins get `name`, `version`, and `channel`; TUI plugins get `version` and `channel`.
 
-Server plugins get `name`, `version`, and `channel`; TUI plugins get `version` and `channel`.
+#### Reference
+
+```ts
+interface App {
+  name: string
+  version: string
+  channel: "local" | "dev" | "beta" | "prod"
+  platform: "web" | "desktop"
+  packaged: boolean
+}
+```
 
 ## Contracts and tokens
 
@@ -293,14 +323,23 @@ ctx.add(Command, {
 })
 ```
 
-| `Live<T>` state | When it happens | Required UI behavior |
-| --- | --- | --- |
-| `{ status: "pending" }` | The provider has not finished starting yet. | Show a loading state or hide optional controls. |
-| `{ status: "active", value, generation }` | The provider is running. `generation` increments on each restart. | Render the feature normally. |
-| `{ status: "inactive", reason: "restarting" }` | The provider was active and is reloading. | Keep existing UI state and resume when it returns. |
-| `{ status: "inactive", reason: "disabled" }` | Turned off, not composed, or unsupported on this platform (all `Ipc` tokens on the web). | Show an unavailable state or omit the control. |
-| `{ status: "inactive", reason: "failed" }` | The provider's setup threw an error. | Show an unavailable state or error toast. |
-| `{ status: "inactive", reason: "blocked" }` | A hard dependency of the provider is disabled or failed. | Show an unavailable state and resume if it returns. |
+- **`pending`:** the provider has not finished starting. Show a loading state or hide optional controls.
+- **`active`:** the provider runs, and `value` is its API. `generation` increments on each restart.
+- **`inactive`, `restarting`:** the provider was active and is reloading. Keep the UI state and resume when it returns.
+- **`inactive`, `disabled`:** the provider is off, not composed, or not supported on this platform, as every `Ipc` token
+  is on the web. Show an unavailable state or omit the control.
+- **`inactive`, `failed`:** the provider's setup threw an error. Show an unavailable state or an error toast.
+- **`inactive`, `blocked`:** a hard dependency of the provider is off or failed. Show an unavailable state and resume if
+  it returns.
+
+#### Reference
+
+```ts
+type Live<T> =
+  | { status: "pending" }
+  | { status: "active"; value: T; generation: number }
+  | { status: "inactive"; reason: "disabled" | "failed" | "blocked" | "restarting" }
+```
 
 ## Lifetimes and cleanup
 
@@ -313,10 +352,9 @@ event listeners) is withdrawn when its owning scope ends:
 
 For other resources, such as timers or sockets, return a cleanup function from the setup. It runs at the same time.
 
-| Setup | May be `async` | Cleanup |
-| --- | --- | --- |
-| `setup` (window) | No. It runs under a Solid owner. | Return a cleanup function, or use `onCleanup` or `ctx.signal`. |
-| `main` | Yes. | Return, or resolve to, a cleanup function, or use `ctx.scope.addFinalizer`. |
+- **Window `setup`** cannot be `async`, because it runs under a Solid owner. Return a cleanup function, or use
+  `onCleanup` or `ctx.signal`.
+- **`main`** may be `async`. Return, or resolve to, a cleanup function, or use `ctx.scope.addFinalizer`.
 
 ### Window setup
 
