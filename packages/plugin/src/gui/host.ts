@@ -458,6 +458,8 @@ export interface Installed {
   readonly enabled: boolean
   /** Why its main entry failed, if it did. */
   readonly error?: string
+  /** A plugin from the config that also exports `./tui`, which `cli.json` turns off; a built-in has no TUI part. */
+  readonly tui?: boolean
 }
 
 /**

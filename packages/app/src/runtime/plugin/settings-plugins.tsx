@@ -92,6 +92,19 @@ export function PluginsSettings() {
                       <Show when={errorOf(definition.id)}>
                         {(error) => <pre class="mt-1 whitespace-pre-wrap text-text-danger-base">{error()}</pre>}
                       </Show>
+                      {/* A plugin from the config has parts this switch does not turn off; each row names its own. */}
+                      <Show when={itemOf(definition.id)?.builtin === false}>
+                        <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3">
+                          <dt class="text-v2-text-text-base">{language.t("settings.plugins.part.desktop")}</dt>
+                          <dd>{language.t("settings.plugins.part.desktop.description")}</dd>
+                          <dt class="text-v2-text-text-base">{language.t("settings.plugins.part.server")}</dt>
+                          <dd>{language.t("settings.plugins.part.server.description", { id: definition.id })}</dd>
+                          <Show when={itemOf(definition.id)?.tui}>
+                            <dt class="text-v2-text-text-base">{language.t("settings.plugins.part.tui")}</dt>
+                            <dd>{language.t("settings.plugins.part.tui.description", { id: definition.id })}</dd>
+                          </Show>
+                        </dl>
+                      </Show>
                     </>
                   }
                 >

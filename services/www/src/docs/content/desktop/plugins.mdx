@@ -35,12 +35,27 @@ terminal  Built-in   Active    Reload  [on]
 acme                 Active    Reload  [on]
 ```
 
-- **Switch:** enables or disables the plugin in all desktop windows. The setting persists across restarts.
+- **Switch:** turns the plugin's desktop UI on or off in all desktop windows. The setting persists across restarts. For a plugin from your config, the server and TUI parts keep running; see [Other parts of a plugin](#other-parts-of-a-plugin).
 - **Reload:** reloads the plugin in every window and in the main process, and clears any recorded failure. If the main process reload fails, the last working revision stays active.
 
 When you disable a plugin, the host immediately withdraws all of its commands, panels, slots, titlebar items, native menu items, and settings pages in a single frame.
 
 If the desktop app no longer knows a plugin's ID, for example because the plugin was just removed, its switch and **Reload** button show a **Plugin not found** error.
+
+### Other parts of a plugin
+
+A plugin from your config can also run on the server and in the TUI. Its row lists each part and the setting that turns it off:
+
+```text
+acme      Active                                                              Reload  [on]
+Desktop   This switch turns off the desktop UI only. The other parts keep running.
+Server    Running. Add "-acme" to plugins in your global opencode.json to turn off the server part and the desktop UI.
+TUI       Add "-acme" to plugins in cli.json to turn off the TUI part.
+```
+
+- **Desktop:** the row's switch.
+- **Server:** `"-acme"` in `plugins` in your global [`opencode.json(c)`](/plugins). The desktop UI loads only for plugins that the server runs, so it turns off too.
+- **TUI:** `"-acme"` in `plugins` in [`cli.json`](/cli/plugins). The row lists this part only when the plugin exports `./tui`.
 
 ## Add plugins
 
@@ -52,11 +67,7 @@ Third-party GUI plugins come from [plugins](/plugins) in your configuration. A p
 }
 ```
 
-The plugin appears in **Settings > Plugins** without a label. Configure the plugin globally to make its GUI available in every window.
-
-### Where GUI plugins load
-
-OpenCode Desktop loads GUI plugins only from plugins on its own background server. The web app, and plugins on other connected servers such as [SSH](/desktop/ssh), [WSL](/desktop/wsl), and HTTP servers, do not add their GUI to the app yet; those plugins still run on their server.
+The plugin appears in **Settings > Plugins** without a label. OpenCode Desktop loads GUI plugins from its own background server, so configure the plugin globally to make its GUI available in every window.
 
 ### Remove a plugin
 
