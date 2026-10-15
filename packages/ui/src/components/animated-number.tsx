@@ -75,9 +75,9 @@ export function AnimatedNumber(props: { value: number; class?: string }) {
     return Math.max(0, Math.round(props.value))
   })
 
-  const [state, setState] = createStore({
+  const [state, setState] = createStore<{ value: number; direction: 1 | -1 }>({
     value: target(),
-    direction: 1 as 1 | -1,
+    direction: 1,
   })
 
   const value = () => state.value
