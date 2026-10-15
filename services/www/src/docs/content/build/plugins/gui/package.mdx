@@ -259,12 +259,9 @@ import { readFile } from "node:fs/promises" // The main process; an inert placeh
 
 ## Where GUI entries load
 
-OpenCode Desktop loads GUI entries only from its own background server, which already runs the plugins' server entries,
-so they never add a new source of code.
-
-- **Not yet:** the web app, and plugins on other connected servers such as [SSH](/desktop/ssh), [WSL](/desktop/wsl), and
-  HTTP servers. Those plugins run their server entries there, but load no GUI into your app.
-- **Global config:** configure the plugin in the global `opencode.json(c)` to make its GUI available in every window.
+OpenCode Desktop loads GUI entries from its own background server, which already runs the plugins' server entries, so
+they never add a new source of code. Configure the plugin in the global `opencode.json(c)` to make its GUI available in
+every window.
 
 The desktop app's main process lists the plugins and reads their bundles from its own server, with a credential that
 only it holds, and sends windows the same set. A window cannot supply main-process code.
