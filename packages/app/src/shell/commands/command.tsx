@@ -2,7 +2,7 @@ import { createSimpleContext } from "@opencode/ui/context"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { type Accessor, batch, createEffect, createMemo, onCleanup, onMount, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { Schema } from "effect"
+import { Predicate, Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -11,7 +11,7 @@ import { keybindRenames } from "@/settings/keybinds/migration"
 import en from "@/runtime/i18n/en"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 
-const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+const IS_MAC = "navigator" in globalThis && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 const PALETTE_ID = "command.palette"
 
@@ -262,39 +262,40 @@ function displayKeybindParts(kb: Keybind, t?: (key: KeyLabel) => string) {
 
   if (!kb.key) return parts
 
-  const keys: Record<string, string> = {
-    arrowup: "↑",
-    arrowdown: "↓",
-    arrowleft: "←",
-    arrowright: "→",
-    comma: ",",
-    plus: "+",
-  }
+  const keys = new Map(
+    Object.entries({
+      arrowup: "↑",
+      arrowdown: "↓",
+      arrowleft: "←",
+      arrowright: "→",
+      comma: ",",
+      plus: "+",
+    }),
+  )
 
-  const named: Record<string, KeyLabel> = {
-    backspace: "common.key.backspace",
-    delete: "common.key.delete",
-    end: "common.key.end",
-    enter: "common.key.enter",
-    esc: "common.key.esc",
-    escape: "common.key.esc",
-    home: "common.key.home",
-    insert: "common.key.insert",
-    pagedown: "common.key.pageDown",
-    pageup: "common.key.pageUp",
-    space: "common.key.space",
-    tab: "common.key.tab",
-  }
+  const named = new Map(
+    Object.entries({
+      backspace: "common.key.backspace",
+      delete: "common.key.delete",
+      end: "common.key.end",
+      enter: "common.key.enter",
+      esc: "common.key.esc",
+      escape: "common.key.esc",
+      home: "common.key.home",
+      insert: "common.key.insert",
+      pagedown: "common.key.pageDown",
+      pageup: "common.key.pageUp",
+      space: "common.key.space",
+      tab: "common.key.tab",
+    } satisfies Record<string, KeyLabel>),
+  )
 
   const key = kb.key.toLowerCase()
+  const label = named.get(key)
 
   const displayKey =
-    keys[key] ??
-    (named[key]
-      ? keyText(named[key], t)
-      : key.length === 1
-        ? key.toUpperCase()
-        : key.charAt(0).toUpperCase() + key.slice(1))
+    keys.get(key) ??
+    (label ? keyText(label, t) : key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1))
 
   parts.push(displayKey)
 
@@ -335,8 +336,8 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const settings = useSettings()
     const language = useLanguage()
 
-    const [store, setStore] = createStore({
-      registrations: [] as CommandRegistration[],
+    const [store, setStore] = createStore<{ registrations: CommandRegistration[]; suspendCount: number }>({
+      registrations: [],
       suspendCount: 0,
     })
 
@@ -397,7 +398,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       )
     })
 
-    // Built-in GUI extensions republished these commands under new ids. Drop the old entries so
+    // Built-in plugins republished these commands under new ids. Drop the old entries so
     // Settings > Shortcuts lists each command once.
     createEffect(() => {
       if (!catalogReady()) return
@@ -517,8 +518,8 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     function register(cb: () => CommandOption[]): void
     function register(key: string, cb: () => CommandOption[]): void
     function register(key: string | (() => CommandOption[]), cb?: () => CommandOption[]) {
-      const id = typeof key === "string" ? key : undefined
-      const next = typeof key === "function" ? key : cb
+      const id = Predicate.isString(key) ? key : undefined
+      const next = Predicate.isFunction(key) ? key : cb
 
       if (!next) return
       const options = createMemo(next)
