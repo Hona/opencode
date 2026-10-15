@@ -109,6 +109,35 @@ story("summarizes subagents as Agent while retaining their card titles", async (
   await expect(group.locator('[data-component="task-tool-title"]')).toHaveText(["General", "Explore"])
 })
 
+for (const direction of ["ltr", "rtl"]) {
+  story(`reads and shows a two-digit count once, in order, in ${direction}`, async ({ mount }) => {
+    const root = await mount("current-tool-group--sticky-header", { globals: { direction } })
+    const count = root.locator('[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-count"]')
+    await expect(count).toHaveText("37")
+    expect(await count.ariaSnapshot()).toBe('- text: "37"')
+
+    const shown = await count.locator('[data-slot="animated-number-static"]').evaluateAll((digits) =>
+      digits
+        .toSorted((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left)
+        .map((digit) => digit.getAttribute("data-digit"))
+        .join(""),
+    )
+
+    expect(shown).toBe("37")
+  })
+}
+
+story("rolls the count and exposes only its current value while rolling", async ({ mount }) => {
+  const root = await mount("current-tool-group--mixed-reasoning")
+  const count = root.locator('[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-count"]')
+  await expect(count).toHaveText("4")
+  await root.getByRole("button", { name: "Append follow-up read" }).click()
+  await expect(count.locator('[data-animating="true"]')).toHaveCount(1)
+  // One read mid-roll: a retrying assertion would pass once the strip hides again.
+  expect(await count.ariaSnapshot()).toBe('- text: "5"')
+  await expect(count).toHaveText("5")
+})
+
 for (const width of [840, 390]) {
   story(`keeps grouped cards inside their trigger bounds at ${width}px`, async ({ mount, page }) => {
     await page.setViewportSize({ width, height: 600 })

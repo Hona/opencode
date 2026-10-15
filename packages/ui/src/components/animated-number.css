@@ -7,7 +7,8 @@
 
   [data-slot="animated-number-value"] {
     display: inline-flex;
-    flex-direction: row-reverse;
+    /* Digits keep numeric order in RTL documents. */
+    direction: ltr;
     align-items: baseline;
     justify-content: flex-end;
     line-height: inherit;
@@ -56,6 +57,7 @@
     line-height: 1em;
   }
 
+  [data-slot="animated-number-static"]::before,
   [data-slot="animated-number-cell"]::before {
     content: attr(data-digit);
   }
