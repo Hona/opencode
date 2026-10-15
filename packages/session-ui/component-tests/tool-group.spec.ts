@@ -110,22 +110,51 @@ story("summarizes subagents as Agent while retaining their card titles", async (
 })
 
 for (const direction of ["ltr", "rtl"]) {
-  story(`reads and shows a two-digit count once, in order, in ${direction}`, async ({ mount }) => {
+  story(`reads and shows a two-digit count once, in order, in ${direction}`, async ({ mount, page }) => {
     const root = await mount("current-tool-group--sticky-header", { globals: { direction } })
     const count = root.locator('[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-count"]')
     await expect(count).toHaveText("37")
     expect(await count.ariaSnapshot()).toBe('- text: "37"')
+    await page.evaluate(() => document.fonts.ready.then(() => undefined))
 
-    const shown = await count.locator('[data-slot="animated-number-static"]').evaluateAll((digits) =>
-      digits
-        .toSorted((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left)
-        .map((digit) => digit.getAttribute("data-digit"))
-        .join(""),
-    )
+    // Digits inside the clipped width, left to right; the spare leading zero sits outside it. The width eases to
+    // the loaded font's metrics, so read it once it settles.
+    await expect
+      .poll(() =>
+        count.locator('[data-slot="animated-number-value"]').evaluate((value) => {
+          const clip = value.getBoundingClientRect()
 
-    expect(shown).toBe("37")
+          return Array.from(value.querySelectorAll('[data-slot="animated-number-static"]'))
+            .map((digit) => ({ left: digit.getBoundingClientRect().left, digit: digit.getAttribute("data-digit") }))
+            .filter((digit) => digit.left >= clip.left - 0.5 && digit.left < clip.right)
+            .toSorted((a, b) => a.left - b.left)
+            .map((digit) => digit.digit)
+            .join("")
+        }),
+      )
+      .toBe("37")
   })
 }
+
+story("rolls the leading digit in and out when the count gains or loses a digit", async ({ mount }) => {
+  const root = await mount("current-tool-group--count-rollover")
+  const count = root.locator('[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-count"]')
+  const rolling = count.locator('[data-animating="true"]')
+  await expect(count).toHaveText("9")
+
+  await root.getByRole("button", { name: "Add read" }).click()
+  // The tens digit rolls in from zero beside the ones digit instead of appearing.
+  await expect(rolling).toHaveCount(2)
+  expect(await count.ariaSnapshot()).toBe('- text: "10"')
+  await expect(rolling).toHaveCount(0)
+
+  await root.getByRole("button", { name: "Remove read" }).click()
+  // The tens digit rolls back to zero before it leaves instead of vanishing.
+  await expect(rolling).toHaveCount(2)
+  expect(await count.ariaSnapshot()).toBe('- text: "9"')
+  await expect(rolling).toHaveCount(0)
+  await expect(count).toHaveText("9")
+})
 
 story("rolls the count and exposes only its current value while rolling", async ({ mount }) => {
   const root = await mount("current-tool-group--mixed-reasoning")

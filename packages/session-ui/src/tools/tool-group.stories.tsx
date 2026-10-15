@@ -109,6 +109,39 @@ export const MixedReasoning = {
   },
 }
 
+export const CountRollover = {
+  render: () => {
+    const [state, setState] = createStore({ open: false, count: 9 })
+
+    const parts = createMemo(() =>
+      Array.from({ length: state.count }, (_, index) =>
+        storyTool(`rollover_read_${index}`, "read", "completed", { path: `src/file-${index}.ts` }),
+      ),
+    )
+
+    return (
+      <section class="mx-auto flex w-full max-w-[860px] flex-col gap-4 p-6">
+        <div class="flex gap-3">
+          <button type="button" onClick={() => setState("count", (count) => count + 1)}>
+            Add read
+          </button>
+          <button type="button" onClick={() => setState("count", (count) => count - 1)}>
+            Remove read
+          </button>
+        </div>
+        <CurrentSessionProviders document={storyDocument(parts())}>
+          <CurrentContextToolGroup
+            parts={parts()}
+            busy={false}
+            open={state.open}
+            onOpenChange={(open) => setState("open", open)}
+          />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
+}
+
 // Mirrors a long exploration turn in a timeline viewport with the session title header above it.
 const stickyCommands = [
   "git log --oneline 09c318094c..upstream/v2 -- packages/tui/src/plugin/structure.ts packages/tui/src/plugin/render.tsx",
@@ -168,7 +201,7 @@ export const StickyHeader = {
   args: { height: 720 },
   argTypes: { height: { control: { type: "range", min: 320, max: 1200, step: 20 } } },
   render: (args: { height: number }) => {
-    const [state, setState] = createStore({ open: true, files: {} as Record<string, boolean> })
+    const [state, setState] = createStore<{ open: boolean; files: Record<string, boolean> }>({ open: true, files: {} })
 
     return (
       <section

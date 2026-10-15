@@ -19,6 +19,8 @@
 
   [data-slot="animated-number-digit"] {
     display: inline-grid;
+    /* Digits outside the width are clipped at the start edge, not squeezed. */
+    flex-shrink: 0;
     width: 1ch;
     height: 1em;
     line-height: 1em;

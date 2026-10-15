@@ -75,9 +75,12 @@ export function AnimatedNumber(props: { value: number; class?: string }) {
     return Math.max(0, Math.round(props.value))
   })
 
-  const [state, setState] = createStore<{ value: number; direction: 1 | -1 }>({
+  // A spare leading zero waits outside the clipped width to roll in. A digit that leaves stays until the width has
+  // shrunk past it, so it rolls to zero instead of vanishing.
+  const [state, setState] = createStore<{ value: number; direction: 1 | -1; places: number }>({
     value: target(),
     direction: 1,
+    places: String(target()).length + 1,
   })
 
   const value = () => state.value
@@ -91,8 +94,11 @@ export function AnimatedNumber(props: { value: number; class?: string }) {
 
         if (next === current) return
 
-        setState("direction", next > current ? 1 : -1)
-        setState("value", next)
+        setState({
+          direction: next > current ? 1 : -1,
+          value: next,
+          places: Math.max(state.places, String(next).length + 1),
+        })
       },
       { defer: true },
     ),
@@ -100,8 +106,8 @@ export function AnimatedNumber(props: { value: number; class?: string }) {
 
   const label = createMemo(() => value().toString())
 
-  // Place values, most significant first. Keying by place keeps the ones digit rolling when a tens digit appears.
-  const places = createMemo(() => Array.from(label(), (_, index) => label().length - 1 - index))
+  // Place values, most significant first. Keying by place keeps each digit rolling as digits appear and leave.
+  const places = createMemo(() => Array.from({ length: state.places }, (_, index) => state.places - 1 - index))
 
   return (
     <span data-component="animated-number" class={props.class}>
@@ -111,6 +117,9 @@ export function AnimatedNumber(props: { value: number; class?: string }) {
         data-slot="animated-number-value"
         aria-hidden="true"
         style={{ "--animated-number-width": `${label().length}ch` }}
+        onTransitionEnd={(event) => {
+          if (event.target === event.currentTarget) setState("places", label().length + 1)
+        }}
       >
         <For each={places()}>
           {(place) => <Digit value={Math.floor(value() / 10 ** place) % 10} direction={direction()} />}
