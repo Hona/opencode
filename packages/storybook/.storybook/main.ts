@@ -32,8 +32,28 @@ export default defineMain({
   ],
   async viteFinal(config) {
     const { mergeConfig, searchForWorkspaceRoot } = await import("vite")
+    const entry = (glob: string) =>
+      path.relative(config.root ?? process.cwd(), path.resolve(here, glob)).replaceAll("\\", "/")
     const merged = mergeConfig(config, {
       plugins: [tailwindcss(), playgroundCss()],
+      optimizeDeps: {
+        // Without Storybook's optimizer plugin (removed below), Vite finds dependencies on first import and reloads
+        // the page, aborting component tests mid-import. Crawl the stories and every module those tests import first.
+        entries: [
+          entry("../../ui/src/**/*.stories.tsx"),
+          entry("../../session-ui/src/**/*.stories.tsx"),
+          entry("../../app/src/**/*.stories.tsx"),
+          entry("../../gui-extensions/src/**/*.stories.tsx"),
+          entry("../../*/component-tests/*.fixture.tsx"),
+          entry("../../gui-extensions/src/browser/panel.fixture.tsx"),
+          entry("../../gui-extensions/src/{renderer,sdk/index,browser/index,file/index}.ts"),
+          entry("../../gui-extensions/src/{browser/panel,browser/renderer,file/renderer}.tsx"),
+          entry("../../app/src/runtime/extension/{embeds,host,panels,render}.tsx"),
+          entry(
+            "../../app/src/{runtime/i18n/language,runtime/platform/platform,settings/model,shell/commands/command}.tsx",
+          ),
+        ],
+      },
       resolve: {
         dedupe: ["solid-js", "solid-js/web", "@solidjs/meta"],
         alias: [
