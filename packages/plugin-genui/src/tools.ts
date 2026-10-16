@@ -16,7 +16,7 @@ export const register = Effect.fn("GenUITools.register")(function* (ctx: Pick<Co
       Skill.Info.make({
         id: Skill.ID.make("genui"),
         name: Skill.Name.make("GenUI"),
-        description: `Syntax, components and examples for ${GenUI.RENDER_TOOL}. Load it before your first ${GenUI.RENDER_TOOL} call.`,
+        description: `Use before your first ${GenUI.RENDER_TOOL} call, when structure or interaction would answer better than text in the OpenCode app: dashboards, charts, comparisons, plans, pickers and forms. Covers when to use generated UI, how it fits a turn, and its syntax, components and examples.`,
         path: AbsolutePath.make("/builtin/genui.md"),
         content: GenUIGuide.text,
       }),
