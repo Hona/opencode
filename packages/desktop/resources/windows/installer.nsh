@@ -1,7 +1,3 @@
-; The CRC check reads the whole installer before anything starts, about 0.5 s for 230 MB. Updates
-; already verify the download's SHA-512 before they run it.
-CRCCheck off
-
 !macro customInstall
   ; Chromium's sandbox needs read/execute access to the installed runtime files.
   ; https://github.com/electron/electron/issues/49143#issuecomment-3618354787
