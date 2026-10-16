@@ -290,6 +290,7 @@
         "@opencode/codemode": "workspace:*",
         "@opencode/plugin": "workspace:*",
         "@opencode/plugin-browser": "workspace:*",
+        "@opencode/plugin-genui": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/util": "workspace:*",
         "@parcel/watcher": "2.5.1",
@@ -561,6 +562,22 @@
         "typescript": "catalog:",
       },
     },
+    "packages/plugin-genui": {
+      "name": "@opencode/plugin-genui",
+      "version": "2.0.27",
+      "dependencies": {
+        "@opencode/ai": "workspace:*",
+        "@opencode/plugin": "workspace:*",
+        "@opencode/schema": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/plugins/figma": {
       "name": "@opencode/plugin-figma",
       "version": "2.0.30",
@@ -680,6 +697,7 @@
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode/client": "workspace:*",
+        "@opencode/plugin-genui": "workspace:*",
         "@opencode/ui": "workspace:*",
         "@opencode/util": "workspace:*",
         "@pierre/diffs": "catalog:",
@@ -2052,6 +2070,8 @@
     "@opencode/plugin-browser": ["@opencode/plugin-browser@workspace:packages/plugin-browser"],
 
     "@opencode/plugin-figma": ["@opencode/plugin-figma@workspace:packages/plugins/figma"],
+
+    "@opencode/plugin-genui": ["@opencode/plugin-genui@workspace:packages/plugin-genui"],
 
     "@opencode/posts": ["@opencode/posts@workspace:packages/posts"],
 

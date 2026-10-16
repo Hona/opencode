@@ -62,6 +62,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     turnDiff?: TurnDiffSource
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
+    /** Sends a prompt as the user, e.g. a reply from an agent-rendered surface. Absent where the user cannot reply. */
+    onPrompt?: (input: { sessionID: string; text: string }) => Promise<void>
   }) => {
     return {
       get store() {
@@ -78,6 +80,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       shellRunning: props.shellRunning,
       shellOutput: props.shellOutput,
       turnDiff: props.turnDiff,
+      prompt: props.onPrompt,
     }
   },
 })

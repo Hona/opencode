@@ -112,6 +112,7 @@ export function SessionUIProvider(
       }}
       onNavigateToSession={navigateToSession}
       onSessionHref={href}
+      onPrompt={(input) => data.session.prompt({ ...input, metadata: { client: "app" } }).then(() => undefined)}
     >
       <MarkdownProvider readImage={readImage()} openSession={openReferencedSession}>
         <LocalProvider>{props.children}</LocalProvider>
