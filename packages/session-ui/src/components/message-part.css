@@ -743,6 +743,11 @@
       width: 100%;
     }
 
+    /* Grouped commentary follows the list rhythm instead of the timeline's text spacing. */
+    > [data-component="text-part"] {
+      margin-top: 0;
+    }
+
     > [data-component="tool-part-wrapper"]
       > [data-component="collapsible"]
       > [data-slot="collapsible-trigger"]:not([data-hide-details="true"]) {
