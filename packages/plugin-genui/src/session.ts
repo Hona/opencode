@@ -7,7 +7,7 @@ import { Effect, Stream } from "effect"
 import { GenUI } from "./genui.js"
 
 const enter = `<system-reminder>
-The user is viewing this session in the OpenCode app. ${GenUI.RENDER_TOOL} shows them interactive UI, such as dashboards, charts and forms, drawn while you write it; load the genui skill for its syntax first. App-only tools such as the browser are in your tool list when they are available.
+The user is viewing this session in the OpenCode app. ${GenUI.RENDER_TOOL} shows them interactive UI, such as dashboards, charts and forms, drawn while you write it; load the genui skill for its syntax first. When the in-app browser is connected, its tools are in your tool list and the browser skill explains them.
 </system-reminder>`
 
 const leave = `<system-reminder>
