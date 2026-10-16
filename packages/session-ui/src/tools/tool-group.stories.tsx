@@ -111,12 +111,24 @@ export const MixedReasoning = {
 
 export const CountRollover = {
   render: () => {
-    const [state, setState] = createStore({ open: false, count: 9 })
+    const [state, setState] = createStore({ open: false, count: 9, attached: true })
 
     const parts = createMemo(() =>
       Array.from({ length: state.count }, (_, index) =>
         storyTool(`rollover_read_${index}`, "read", "completed", { path: `src/file-${index}.ts` }),
       ),
+    )
+
+    // Created once, like a cached session timeline: detaching removes it from the page but keeps it updating.
+    const group = (
+      <CurrentSessionProviders document={storyDocument(parts())}>
+        <CurrentContextToolGroup
+          parts={parts()}
+          busy={false}
+          open={state.open}
+          onOpenChange={(open) => setState("open", open)}
+        />
+      </CurrentSessionProviders>
     )
 
     return (
@@ -128,15 +140,11 @@ export const CountRollover = {
           <button type="button" onClick={() => setState("count", (count) => count - 1)}>
             Remove read
           </button>
+          <button type="button" onClick={() => setState("attached", (attached) => !attached)}>
+            {state.attached ? "Detach" : "Attach"}
+          </button>
         </div>
-        <CurrentSessionProviders document={storyDocument(parts())}>
-          <CurrentContextToolGroup
-            parts={parts()}
-            busy={false}
-            open={state.open}
-            onOpenChange={(open) => setState("open", open)}
-          />
-        </CurrentSessionProviders>
+        <Show when={state.attached}>{group}</Show>
       </section>
     )
   },

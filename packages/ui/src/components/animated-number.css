@@ -14,6 +14,9 @@
     line-height: inherit;
     width: var(--animated-number-width, 1ch);
     overflow: hidden;
+  }
+
+  [data-slot="animated-number-value"][data-resizing="true"] {
     transition: width var(--tool-motion-spring-ms, 560ms) var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
   }
 
@@ -71,8 +74,10 @@
   [data-slot="animated-number-strip"] {
     display: inline-flex;
     flex-direction: column;
-    transform: translateY(calc(var(--animated-number-offset, 10) * -1em));
-    transition-property: transform;
+    /* Not transform: a composited roll lands on whole pixels, then the digit shifts as it settles. */
+    position: relative;
+    top: calc(var(--animated-number-offset, 10) * -1em);
+    transition-property: top;
     transition-duration: var(--animated-number-duration, 560ms);
     transition-timing-function: var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1));
   }
@@ -84,7 +89,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-component="animated-number"] [data-slot="animated-number-value"] {
+  [data-component="animated-number"] [data-slot="animated-number-value"][data-resizing] {
     transition-duration: 0ms;
   }
 

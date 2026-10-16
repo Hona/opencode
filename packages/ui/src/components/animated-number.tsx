@@ -26,6 +26,7 @@ function Digit(props: { value: number; direction: 1 | -1 }) {
   const step = () => state.step
   const animating = () => state.animating
   let last = props.value
+  let strip: HTMLSpanElement | undefined
 
   createEffect(
     on(
@@ -34,15 +35,19 @@ function Digit(props: { value: number; direction: 1 | -1 }) {
         const delta = spin(last, next, props.direction)
         last = next
 
-        if (!delta) {
-          setState("animating", false)
-          setState("step", next + 10)
+        // An unchanged digit keeps any roll it is in the middle of.
+        if (!delta) return
+
+        const target = step() + delta
+
+        // A detached digit never finishes a roll, and rapid changes can run off the track, so both settle at once.
+        if (!strip?.isConnected || target < 0 || target >= TRACK.length) {
+          setState({ animating: false, step: next + 10 })
 
           return
         }
 
-        setState("animating", true)
-        setState("step", (value) => value + delta)
+        setState({ animating: true, step: target })
       },
       { defer: true },
     ),
@@ -52,6 +57,7 @@ function Digit(props: { value: number; direction: 1 | -1 }) {
     <span data-slot="animated-number-digit" data-animating={animating() ? "true" : "false"}>
       <span data-slot="animated-number-static" data-digit={props.value} />
       <span
+        ref={strip}
         data-slot="animated-number-strip"
         onTransitionEnd={() => {
           setState("animating", false)
@@ -77,14 +83,16 @@ export function AnimatedNumber(props: { value: number; class?: string }) {
 
   // A spare leading zero waits outside the clipped width to roll in. A digit that leaves stays until the width has
   // shrunk past it, so it rolls to zero instead of vanishing.
-  const [state, setState] = createStore<{ value: number; direction: 1 | -1; places: number }>({
+  const [state, setState] = createStore<{ value: number; direction: 1 | -1; places: number; resizing: boolean }>({
     value: target(),
     direction: 1,
     places: String(target()).length + 1,
+    resizing: false,
   })
 
   const value = () => state.value
   const direction = () => state.direction
+  let box: HTMLSpanElement | undefined
 
   createEffect(
     on(
@@ -94,10 +102,21 @@ export function AnimatedNumber(props: { value: number; class?: string }) {
 
         if (next === current) return
 
+        const digits = String(next).length
+
+        // A detached number cannot ease its width and would never hear it end, so it settles at once.
+        if (!box?.isConnected) {
+          setState({ direction: next > current ? 1 : -1, value: next, places: digits + 1, resizing: false })
+
+          return
+        }
+
+        // Only a change to the digit count eases the width, so a late font swap or zoom never animates it.
         setState({
           direction: next > current ? 1 : -1,
           value: next,
-          places: Math.max(state.places, String(next).length + 1),
+          places: Math.max(state.places, digits + 1),
+          resizing: state.resizing || digits !== String(current).length,
         })
       },
       { defer: true },
@@ -114,11 +133,13 @@ export function AnimatedNumber(props: { value: number; class?: string }) {
       {/* The value is the only text: screen readers and copy read it once, in order. CSS draws the digits. */}
       <span class="sr-only">{label()}</span>
       <span
+        ref={box}
         data-slot="animated-number-value"
+        data-resizing={state.resizing ? "true" : "false"}
         aria-hidden="true"
         style={{ "--animated-number-width": `${label().length}ch` }}
         onTransitionEnd={(event) => {
-          if (event.target === event.currentTarget) setState("places", label().length + 1)
+          if (event.target === event.currentTarget) setState({ places: label().length + 1, resizing: false })
         }}
       >
         <For each={places()}>
