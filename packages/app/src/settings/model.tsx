@@ -118,6 +118,8 @@ const generalSchema = Persistence.struct({
   }),
   showCustomAgents: Schema.Boolean,
   showTurnDiffs: Schema.Boolean,
+  // Lets agents render generated UI in the timeline; an experiment users can turn off.
+  generatedUI: Schema.Boolean,
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review extension, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
@@ -281,6 +283,7 @@ export const defaultSettings: Settings = {
     timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: false,
     showTurnDiffs: false,
+    generatedUI: true,
     mobileTitlebarPosition: "top",
     terminalPlacement: "side",
     followUpBehavior: "steer",
@@ -357,6 +360,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showTurnDiffs: withFallback(() => store.general?.showTurnDiffs, defaultSettings.general.showTurnDiffs),
         setShowTurnDiffs(value: boolean) {
           setStore("general", "showTurnDiffs", value)
+        },
+        generatedUI: withFallback(() => store.general?.generatedUI, defaultSettings.general.generatedUI),
+        setGeneratedUI(value: boolean) {
+          setStore("general", "generatedUI", value)
         },
         mobileTitlebarPosition: withFallback(
           () => store.general?.mobileTitlebarPosition,

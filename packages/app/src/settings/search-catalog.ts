@@ -21,6 +21,7 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "notifications", label: "settings.tab.notifications" },
   { tab: "shortcuts", label: "settings.shortcuts.title", keywords: "keybind keyboard hotkey" },
   { tab: "about", label: "settings.tab.about", keywords: "version license credits" },
+  { tab: "experimental", label: "settings.tab.experimental", keywords: "experiments preview beta" },
   { tab: "general", label: "settings.general.row.language.title", target: "settings-language" },
   {
     tab: "general",
@@ -78,6 +79,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     label: "settings.general.row.showCustomAgents.title",
     target: "settings-show-custom-agents",
     section: "settings.general.section.general",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.generatedUI.title",
+    target: "settings-generated-ui",
+    description: "settings.experimental.row.generatedUI.description",
+    keywords: "genui generative interface dashboards charts forms",
   },
   {
     tab: "appearance",

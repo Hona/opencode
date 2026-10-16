@@ -13,6 +13,7 @@ import { readLocalImage } from "@/runtime/server/image"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
 import { createTurnDiffCache } from "@/session/timeline/turn-diffs"
+import { useSettings } from "@/settings/model"
 
 export function SessionUIProvider(
   props: ParentProps<{
@@ -26,6 +27,7 @@ export function SessionUIProvider(
   const serverSDK = useServerSDK()
   const tabs = useTabs()
   const language = useLanguage()
+  const settings = useSettings()
   const directory = () => props.directory
 
   const readImage = createMemo<ReadMarkdownImage>(() => {
@@ -112,7 +114,9 @@ export function SessionUIProvider(
       }}
       onNavigateToSession={navigateToSession}
       onSessionHref={href}
-      onPrompt={(input) => data.session.prompt({ ...input, metadata: { client: "app" } }).then(() => undefined)}
+      onPrompt={(input) =>
+        data.session.prompt({ ...input, metadata: { genui: settings.general.generatedUI() } }).then(() => undefined)
+      }
     >
       <MarkdownProvider readImage={readImage()} openSession={openReferencedSession}>
         <LocalProvider>{props.children}</LocalProvider>

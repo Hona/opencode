@@ -37,7 +37,8 @@ statically, and has no install scripts, telemetry or third-party prompt text.
 - `tools.ts`: the skill and the `genui_render` tool, which returns each problem
   by statement.
 - `session.ts`: offers the tool, and adds a short reminder, only while the
-  session's latest prompt came from the app (`metadata.client = "app"`).
+  session's latest prompt came from the app with generated UI on
+  (`metadata.genui = true`). The app's Experimental settings turn it off.
 
 `./genui`, `./lang` and `./catalog` are browser-safe; `session-ui` renders with
 them. `.` is the server plugin.

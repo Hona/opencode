@@ -72,9 +72,9 @@ const run = async () => {
 }
 
 describe("GenUISession", () => {
-  test("offers the render tool and tells the agent once while the user is in the app", async () => {
+  test("offers the render tool and tells the agent once while the app shows generated UI", async () => {
     const plugin = await run()
-    await plugin.prompt({ client: "app" })
+    await plugin.prompt({ genui: true })
     const first = await plugin.context([Message.user("Show me the build")])
 
     expect(Object.keys(first.tools)).toEqual([GenUI.RENDER_TOOL, "read"])
@@ -89,16 +89,16 @@ describe("GenUISession", () => {
     expect(second.messages).toHaveLength(2)
   })
 
-  test("hides the render tool and says so once the user prompts from elsewhere", async () => {
+  test("hides the render tool and says so once a prompt comes without generated UI", async () => {
     const plugin = await run()
-    await plugin.prompt({ client: "app" })
+    await plugin.prompt({ genui: true })
     await plugin.context([Message.user("hi")])
-    await plugin.prompt()
-    const request = await plugin.context([Message.user(plugin.persisted[0] ?? ""), Message.user("From the terminal")])
+    await plugin.prompt({ genui: false })
+    const request = await plugin.context([Message.user(plugin.persisted[0] ?? ""), Message.user("Text only now")])
 
     expect(Object.keys(request.tools)).toEqual(["read"])
     expect(plugin.persisted).toHaveLength(2)
-    expect(plugin.persisted[1]).toContain("no longer viewing")
+    expect(plugin.persisted[1]).toContain("no longer available")
   })
 
   test("never offers the render tool to a session the app has not prompted, such as a subagent", async () => {

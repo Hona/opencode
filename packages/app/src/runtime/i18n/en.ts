@@ -674,6 +674,8 @@ export const dict = {
   "settings.tab.extensions": "Extensions",
   "settings.tab.experimental": "Experimental",
   "settings.experimental.description": "Try experimental features",
+  "settings.experimental.row.generatedUI.title": "Generated UI",
+  "settings.experimental.row.generatedUI.description": "Let agents show dashboards, charts and forms in the timeline",
   "settings.guiExtensions.title": "Extensions",
   "settings.guiExtensions.description": "Built-in GUI extensions in this window. Development builds only.",
   "settings.guiExtensions.reload": "Reload",
