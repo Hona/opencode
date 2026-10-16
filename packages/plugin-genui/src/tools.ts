@@ -16,7 +16,7 @@ export const register = Effect.fn("GenUITools.register")(function* (ctx: Pick<Co
       Skill.Info.make({
         id: Skill.ID.make("genui"),
         name: Skill.Name.make("GenUI"),
-        description: `Use before your first ${GenUI.RENDER_TOOL} call, when structure or interaction would answer better than text in the OpenCode app: dashboards, charts, comparisons, plans, pickers and forms. Covers when to use generated UI, how it fits a turn, and its syntax, components and examples.`,
+        description: `Read before your first ${GenUI.RENDER_TOOL} call. Generated UI is for the few answers in the OpenCode app that are clearly better seen or clicked than read, such as dashboards, charts of real data, comparisons and forms; most answers stay text. Covers when to use it and when not to, how it fits a turn, and its syntax, components and examples.`,
         path: AbsolutePath.make("/builtin/genui.md"),
         content: GenUIGuide.text,
       }),
@@ -26,7 +26,7 @@ export const register = Effect.fn("GenUITools.register")(function* (ctx: Pick<Co
     .transform((editor) =>
       editor.add({
         name: "render",
-        description: `Show the user interactive UI in the OpenCode app: dashboards, charts, plans, comparisons, pickers, forms and small stateful tools. It renders natively while you write it. Load the genui skill for the syntax first. Replies from buttons and forms arrive as the user's next message. Pass surfaceID from an earlier result to replace that surface. Every call is checked and its problems come back in the result.`,
+        description: `Show the user interactive UI in the OpenCode app: dashboards, charts, plans, comparisons, pickers, forms and small stateful tools. It renders natively while you write it. Use it sparingly, only when a surface is clearly better than text; never for explanations, status updates, code or a few values. Load the genui skill first. Replies from buttons and forms arrive as the user's next message. Pass surfaceID from an earlier result to replace that surface. Every call is checked and its problems come back in the result.`,
         // Property order is the order models write arguments in: the title and target first, so a client can place
         // the surface before its program streams in.
         input: Schema.Struct({
