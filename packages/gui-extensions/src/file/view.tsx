@@ -448,14 +448,14 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     },
   )
 
-  const renderFile = (source: string) => (
+  const renderFile = () => (
     <div class="relative overflow-hidden pb-40">
       <Dynamic
         component={fileComponent}
         mode="text"
         file={{
           name: path() ?? "",
-          contents: source,
+          contents: contents(),
           cacheKey: cacheKey(),
         }}
         enableLineSelection
@@ -493,9 +493,11 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
   )
 
   // The code view scrolls inside ScrollView so line state and scroll position persist per tab.
-  const codeView = (source: string) => (
+  // It reads the text itself: `Show` tracks its fallback, so passing the content in would rebuild the view, scrolled to
+  // the top, each time a reread stores a new content object.
+  const codeView = () => (
     <ScrollView class="min-h-0 flex-1" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll}>
-      {renderFile(source)}
+      {renderFile()}
     </ScrollView>
   )
 
@@ -504,13 +506,13 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       <Switch>
         <Match when={current()?.loaded ? current()?.content : undefined}>
           {(value) => (
-            <Show when={artifact()} fallback={codeView(value().content)}>
+            <Show when={artifact()} fallback={codeView()}>
               <ArtifactView
                 session={props.session}
                 path={path() ?? ""}
                 content={value()}
                 cacheKey={cacheKey()}
-                source={codeView(value().content)}
+                source={codeView()}
               />
             </Show>
           )}

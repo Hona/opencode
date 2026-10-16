@@ -537,7 +537,9 @@ test("a restored file tab keeps the file tree on Files Changed", async ({ page }
 })
 
 test("rereads a file each time an artifact link opens it", async ({ page }) => {
-  const file = { content: "first draft" }
+  // Enough lines to scroll the code view, ending in the draft's name.
+  const draft = (name: string) => [...Array.from({ length: 200 }, (_, index) => `item ${index + 1}`), name].join("\n")
+  const file = { content: draft("first draft") }
 
   const messages = [
     { id: "msg_prompt", type: "user", text: "Write the shopping list", time: { created: 1 } },
@@ -565,13 +567,29 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   await expect(tab).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("first draft", { exact: true })).toBeVisible()
 
-  file.content = "second draft"
+  // Rereading the open file updates it in place: the code view keeps its node and never jumps back to the top.
+  const code = panel.locator(".scroll-view__viewport", { has: page.locator('[data-component="file"]') })
+  await code.hover()
+  await page.mouse.wheel(0, 100_000)
+  await expect
+    .poll(() => code.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1)
+  const scrolled = await code.evaluate((element) => element.scrollTop)
+  expect(scrolled).toBeGreaterThan(0)
+  await code.evaluate((element) => void (element.dataset.e2eProbe = "original"))
+  file.content = draft("second draft")
+  await link.click()
+  await expect(panel.getByText("second draft", { exact: true })).toBeVisible()
+  expect(await code.evaluate((element) => element.dataset.e2eProbe)).toBe("original")
+  expect(await code.evaluate((element) => element.scrollTop)).toBe(scrolled)
+
+  file.content = draft("third draft")
   await tab.locator("..").getByRole("button", { name: "Close tab" }).click()
   await expect(tab).toHaveCount(0)
   await link.click()
   await expect(tab).toHaveAttribute("aria-selected", "true")
-  await expect(panel.getByText("second draft", { exact: true })).toBeVisible()
-  await expect(panel.getByText("first draft", { exact: true })).toHaveCount(0)
+  await expect(panel.getByText("third draft", { exact: true })).toBeVisible()
+  await expect(panel.getByText("second draft", { exact: true })).toHaveCount(0)
 
   // A restored file tab whose file was deleted shows its inline not-found state without a toast; clicking a broken link
   // when no tab is open for it shows the toast.
