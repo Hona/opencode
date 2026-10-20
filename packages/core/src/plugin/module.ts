@@ -138,16 +138,19 @@ const load = Effect.fn("PluginModule.load")(function* (
   )).default
   const plugin = "effect" in value ? value : PluginPromise.fromPromise(value)
   const revision = JSON.stringify([operation, loaded.version])
-  // A local plugin's `./gui` bundle is outside the server entry's import graph: watch it, and let its content change the
-  // GUI's revision, so an edit reloads the GUI like a server or TUI edit reloads theirs. A package's bundle changes only
-  // with its installed version. The GUI's revision is a hash: windows receive it, and the operation holds the options.
+  // A local plugin's `./gui-experimental` bundle is outside the server entry's import graph: watch it, and let its
+  // content change the GUI's revision, so an edit reloads the GUI like a server or TUI edit reloads theirs. A package's
+  // bundle changes only with its installed version. The GUI's revision is a hash: windows receive it, and the operation
+  // holds the options.
   const gui = local && entrypoints.gui ? fileURLToPath(entrypoints.gui) : undefined
   if (gui) yield* watch(gui)
   const bundle = gui ? Hash.sha256(yield* Effect.promise(() => readFile(gui))) : undefined
   // The GUI receives the same options as the server entry; they cross to the app, so they must be JSON.
   const guiOptions = entrypoints.gui
     ? yield* Schema.decodeUnknownEffect(GuiOptions)(operation.options).pipe(
-        Effect.mapError((cause) => new LoadError({ message: "Plugin options must be JSON to reach its ./gui", cause })),
+        Effect.mapError(
+          (cause) => new LoadError({ message: "Plugin options must be JSON to reach its ./gui-experimental", cause }),
+        ),
       )
     : {}
   return {

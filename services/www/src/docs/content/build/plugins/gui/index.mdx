@@ -6,7 +6,7 @@ description: "Build the GUI half of an OpenCode plugin for OpenCode Desktop usin
 Every feature of OpenCode Desktop and the web app outside the core shell is a built-in plugin that uses the GUI plugin
 SDK, `@opencode/plugin/gui`. Third-party GUI plugins use the same SDK, registries, host APIs, and IPC bridge.
 
-A GUI plugin is the `./gui` half of an OpenCode [plugin package](/build/plugins/gui/package), beside the
+A GUI plugin is the `./gui-experimental` half of an OpenCode [plugin package](/build/plugins/gui/package), beside the
 [server half](/build/plugins) and the optional [TUI half](/build/plugins/cli). OpenCode Desktop loads the GUI of each
 plugin on its own background server, so configure the plugin in your global `opencode.json(c)` to use it in every
 window.
@@ -16,12 +16,17 @@ window.
   "exports": {
     ".": "./dist/server.js",
     "./tui": "./src/tui.tsx",
-    "./gui": "./dist/gui.cjs"
+    "./gui-experimental": "./dist/gui-experimental.cjs"
   }
 }
 ```
 
-The `./gui` file default-exports `Plugin.define`, like the server and TUI halves:
+<Callout type="note">
+  The GUI plugin API is experimental and may change between releases. The `-experimental` export name says so in your
+  package.
+</Callout>
+
+The `./gui-experimental` file default-exports `Plugin.define`, like the server and TUI halves:
 
 ```tsx title="src/gui.tsx"
 import { Command, Plugin } from "@opencode/plugin/gui"
@@ -61,7 +66,7 @@ A small GUI plugin fits in `src/gui.tsx`. For a larger one, declare the plugin i
 src/
 ├── server.ts           Server half: Plugin.define from @opencode/plugin
 ├── rpc.ts              RPC contract between the server half and its clients
-├── gui.tsx             ./gui entry: export default Plugin.define({ ...definition, setup, main })
+├── gui.tsx             ./gui-experimental entry: export default Plugin.define({ ...definition, setup, main })
 └── gui/
     ├── definition.ts   Plugin.define: id, os, provides, uses, requires, stores, i18n
     ├── contract.ts     Tokens other code may import: Ipc, Contract, Registry
@@ -71,9 +76,9 @@ src/
     └── i18n/en.ts      English copy
 ```
 
-The whole `./gui` file evaluates when a window boots, so keep module scope and `setup` light. Register contributions
-there and do expensive work inside components, `createKeyed`, or `createLatest`. See
-[Split across files](/build/plugins/gui/package#split-across-files) for how the files fit together.
+The whole `./gui-experimental` file evaluates when a window boots, so keep module scope and `setup` light. Register
+contributions there and do expensive work inside components, `createKeyed`, or `createLatest`. See [Split across
+files](/build/plugins/gui/package#split-across-files) for how the files fit together.
 
 ## Define the GUI plugin
 

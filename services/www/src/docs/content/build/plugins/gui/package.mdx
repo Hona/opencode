@@ -1,10 +1,10 @@
 ---
 title: "Package and build"
-description: "Ship a GUI plugin from the same npm package as your server and TUI plugin with one ./gui export."
+description: "Ship a GUI plugin from the same npm package as your server and TUI plugin with one ./gui-experimental export."
 ---
 
-A plugin package can ship server, TUI, and GUI code from one npm package. Add one `./gui` export beside `./tui`, and
-OpenCode Desktop loads it for each plugin on its own background server.
+A plugin package can ship server, TUI, and GUI code from one npm package. Add one `./gui-experimental` export beside
+`./tui`, and OpenCode Desktop loads it for each plugin on its own background server.
 
 ```json title="package.json"
 {
@@ -13,7 +13,7 @@ OpenCode Desktop loads it for each plugin on its own background server.
   "exports": {
     ".": "./dist/server.js",
     "./tui": "./src/tui.tsx",
-    "./gui": "./dist/gui.cjs"
+    "./gui-experimental": "./dist/gui-experimental.cjs"
   },
   "dependencies": {
     "@opencode/plugin": "latest"
@@ -42,11 +42,11 @@ OpenCode resolves each entry point from `exports`, or from conventional file nam
 - **`./tui`** (`tui.tsx`) runs in the TUI and uses `@opencode/plugin/tui`.
 - **`./rpc`** (`rpc.ts`) is the typed RPC contract between the server and its clients, written with
   `@opencode/plugin/rpc`.
-- **`./gui`** (`gui.cjs` or `gui.js`) runs in every desktop app window and in the desktop app's Electron main process,
-  and uses `@opencode/plugin/gui`.
+- **`./gui-experimental`** (`gui-experimental.cjs` or `gui-experimental.js`) runs in every desktop app window and in the
+  desktop app's Electron main process, and uses `@opencode/plugin/gui`.
 
 Every SDK comes from the one `@opencode/plugin` dependency. Export any combination of entries; a package with only
-a server entry and `./gui` is as valid as one with all four.
+a server entry and `./gui-experimental` is as valid as one with all four.
 
 A package needs an active server entry for its GUI to load. The GUI's `id` must equal the server plugin's `id`:
 
@@ -63,7 +63,8 @@ A GUI with a different `id` fails to load, and the error names both ids.
 
 ## Define the GUI
 
-The `./gui` file has one default export, `Plugin.define` from `@opencode/plugin/gui`, like the server and TUI entries.
+The `./gui-experimental` file has one default export, `Plugin.define` from `@opencode/plugin/gui`, like the server and
+TUI entries.
 
 ```tsx title="src/gui.tsx"
 import { Command, Plugin } from "@opencode/plugin/gui"
@@ -96,8 +97,8 @@ export default Plugin.define({
 
 ### One file, two processes
 
-Each process evaluates the whole `./gui` file and reads its default export. Windows run `setup`, and the desktop app's
-main process runs `main`.
+Each process evaluates the whole `./gui-experimental` file and reads its default export. Windows run `setup`, and the
+desktop app's main process runs `main`.
 
 ```tsx title="src/gui.tsx"
 import { shell } from "electron"
@@ -175,7 +176,7 @@ export default Plugin.define({ ...definition, setup, main })
 
 ## Build the bundle
 
-`./gui` must be one prebuilt CommonJS file. Build it with the Vite preset from `@opencode/plugin/gui/vite`:
+`./gui-experimental` must be one prebuilt CommonJS file. Build it with the Vite preset from `@opencode/plugin/gui/vite`:
 
 ```ts title="vite.config.ts"
 import { defineConfig } from "vite"
@@ -212,7 +213,7 @@ export default defineConfig({ plugins: [gui({ entry: "src/desktop.tsx", outFile:
 ```
 
 - `entry` is the file that default-exports `Plugin.define`. It defaults to `src/gui.tsx`.
-- `outFile` is the bundle that the `./gui` export points to. It defaults to `dist/gui.cjs`.
+- `outFile` is the bundle that the `./gui-experimental` export points to. It defaults to `dist/gui-experimental.cjs`.
 
 #### Reference
 
@@ -274,8 +275,8 @@ Run `vite build --watch` while you develop a local plugin:
 vite build --watch
 ```
 
-- Each rebuild of `dist/gui.cjs` reloads the plugin's GUI in every window and in the main process. The server entry does
-  not restart.
+- Each rebuild of `dist/gui-experimental.cjs` reloads the plugin's GUI in every window and in the main process. The
+  server entry does not restart.
 - Changing the plugin's `options` in `opencode.json(c)` reloads the plugin.
 - `opencode plugin update` replaces a package's GUI once the update finishes.
 - [**Settings > Plugins**](/desktop/plugins) lists the plugin without a label; only built-in plugins carry the **Built-in**

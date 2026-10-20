@@ -25,9 +25,10 @@ const shared = {
 const windowOnly = new Set<string>(pluginWindowModules)
 
 /**
- * Evaluates a plugin's `./gui` bundle in main and returns what main runs: its `Plugin.define`'s `main` setup, or one that
- * does nothing for a plugin with none, and its `stores`, `provides`, `os` and catalog. `electron` and Node built-ins
- * are the real modules; the window-only modules are inert placeholders. A bundle that declares another id fails.
+ * Evaluates a plugin's `./gui-experimental` bundle in main and returns what main runs: its `Plugin.define`'s `main`
+ * setup, or one that does nothing for a plugin with none, and its `stores`, `provides`, `os` and catalog. `electron`
+ * and Node built-ins are the real modules; the window-only modules are inert placeholders. A bundle that declares
+ * another id fails.
  */
 export async function evaluateMain(code: string, id: string) {
   const modules = new Map<string, object>(

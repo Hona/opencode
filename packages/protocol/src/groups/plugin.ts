@@ -35,7 +35,7 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
           identifier: "plugin.gui",
           summary: "Read plugin GUI bundle",
           description:
-            "Read an active plugin's prebuilt CommonJS `./gui` bundle. Desktop app windows run its default export; the desktop app's main process runs its `main` export. Fails with not found when no active plugin has the id or the plugin exports no `./gui`.",
+            "Read an active plugin's prebuilt CommonJS `./gui-experimental` bundle. Desktop app windows run its default export; the desktop app's main process runs its `main` export. Fails with not found when no active plugin has the id or the plugin exports no `./gui-experimental`.",
         }),
       ),
   )

@@ -25,12 +25,12 @@ export const Features = Schema.Struct({
   server: Schema.Literal(true).pipe(optional),
   tui: Schema.Literal(true).pipe(optional),
   rpc: Schema.Literal(true).pipe(optional),
-  /** The package exports `./gui`, the GUI bundle the desktop app loads. */
+  /** The package exports `./gui-experimental`, the GUI bundle the desktop app loads. */
   gui: Schema.Literal(true).pipe(optional),
 }).annotate({ identifier: "Plugin.Features" })
 export type Features = typeof Features.Type
 
-/** A plugin's prebuilt CommonJS `./gui` bundle. */
+/** A plugin's prebuilt CommonJS `./gui-experimental` bundle. */
 export interface GuiBundle extends Schema.Schema.Type<typeof GuiBundle> {}
 export const GuiBundle = Schema.Struct({
   /** The bundle's CommonJS code. */

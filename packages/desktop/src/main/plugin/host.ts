@@ -82,7 +82,10 @@ type Loaded = {
   readonly client?: () => OpenCodeClient | undefined
 }
 
-/** A plugin's `./gui` bundle as main read it, evaluated once per revision; a failed evaluation fails its activation. */
+/**
+ * A plugin's `./gui-experimental` bundle as main read it, evaluated once per revision; a failed evaluation fails its
+ * activation.
+ */
 type ListedPlugin = {
   readonly bundle: PluginGuiBundle
   readonly loaded:
@@ -174,8 +177,8 @@ export function createHost(input: {
   )
 
   const embeds = createEmbeds()
-  // Plugins on the app's own server that ship a `./gui` bundle, each at the bundle main last read and runs. Main alone
-  // lists and reads them, from that server first-hand; windows load what main sends.
+  // Plugins on the app's own server that ship a `./gui-experimental` bundle, each at the bundle main last read and
+  // runs. Main alone lists and reads them, from that server first-hand; windows load what main sends.
   const plugins = new Map<string, ListedPlugin>()
   // The ids of plugins a built-in claims, and the follow of the app's own server.
   const inventory: Inventory = { reserved: [], tui: new Set() }
@@ -402,8 +405,8 @@ export function createHost(input: {
       if (event.type === "plugin.updated" || event.type === "server.connected") relistPlugins()
   }
 
-  // Lists the plugins on the app's own server that ship a `./gui` bundle and reads each bundle there. A listing that
-  // fails keeps what main runs.
+  // Lists the plugins on the app's own server that ship a `./gui-experimental` bundle and reads each bundle there. A
+  // listing that fails keeps what main runs.
   const listPlugins = async () => {
     sidecar.module ??= await loadClient()
     const client = sidecarClient()

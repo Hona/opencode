@@ -20,7 +20,7 @@ export const PluginHandler = HttpApiBuilder.group(Api, "server.plugin", (handler
         if (!bundle)
           return yield* new PluginNotFoundError({
             pluginID: ctx.query.id,
-            message: `No active plugin with a ./gui bundle: ${ctx.query.id}`,
+            message: `No active plugin with a ./gui-experimental bundle: ${ctx.query.id}`,
           })
         return yield* response(Effect.succeed(bundle))
       }),

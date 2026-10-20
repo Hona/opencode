@@ -5,14 +5,14 @@ description: "Build the server half of an OpenCode plugin: tools, hooks, integra
 
 Plugins can modify OpenCode's behavior and add new features. A plugin's server half runs in the OpenCode server. One
 package can also change the terminal UI with a `./tui` export ([TUI plugins](/build/plugins/cli)) and the desktop app
-with a `./gui` export ([GUI plugins](/build/plugins/gui)).
+with a `./gui-experimental` export ([GUI plugins](/build/plugins/gui)).
 
 ```json title="package.json"
 {
   "exports": {
     ".": "./dist/server.js",
     "./tui": "./src/tui.tsx",
-    "./gui": "./dist/gui.cjs"
+    "./gui-experimental": "./dist/gui-experimental.cjs"
   }
 }
 ```

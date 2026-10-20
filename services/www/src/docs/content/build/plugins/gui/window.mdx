@@ -4,8 +4,8 @@ description: "Contribute panels, commands, settings, slots, menus, and stored st
 ---
 
 A plugin's `setup` runs in every desktop app window. Pass it to `Plugin.define` from `@opencode/plugin/gui` in the
-plugin's [`./gui` file](/build/plugins/gui/package#define-the-gui). `setup` is synchronous and may return a cleanup
-function; see [Lifetimes and cleanup](/build/plugins/gui#lifetimes-and-cleanup).
+plugin's [`./gui-experimental` file](/build/plugins/gui/package#define-the-gui). `setup` is synchronous and may return a
+cleanup function; see [Lifetimes and cleanup](/build/plugins/gui#lifetimes-and-cleanup).
 
 ```tsx title="src/gui.tsx"
 import { Command, Plugin } from "@opencode/plugin/gui"

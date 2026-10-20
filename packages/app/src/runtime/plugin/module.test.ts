@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { Command, type Registry } from "@opencode/plugin/gui"
 import { pluginDefinition } from "./module"
 
-// One `./gui` bundle for both processes, as a bundler emits it: requires hoisted to module scope, including Electron
-// and Node built-ins that only the main setup uses.
+// One `./gui-experimental` bundle for both processes, as a bundler emits it: requires hoisted to module scope,
+// including Electron and Node built-ins that only the main setup uses.
 const bundle = `
 const sdk = require("@opencode/plugin/gui")
 const mainSdk = require("@opencode/plugin/gui/main")

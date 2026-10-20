@@ -48,7 +48,8 @@ const layer = Layer.effect(
     const gui = Effect.fn("Plugin.gui")(function* (id: Plugin.ID) {
       const gui = active.get(id)?.plugin.gui
       if (!gui) return undefined
-      // A plugin that resolved a `./gui` file but cannot read it now is a server fault, not a missing bundle.
+      // A plugin that resolved a `./gui-experimental` file but cannot read it now is a server fault, not a missing
+      // bundle.
       const code = yield* Effect.promise(() => readFile(fileURLToPath(gui.file), "utf8"))
       return { code, revision: gui.revision, options: gui.options } satisfies Plugin.GuiBundle
     })
@@ -114,7 +115,8 @@ const layer = Layer.effect(
               if (closed) return
               discovered = failures
               const current = Array.from(active.values())
-              // A changed `./gui` bundle alone restarts nothing here; the event tells the app to reload it.
+              // A changed `./gui-experimental` bundle alone restarts nothing here; the event tells the app to reload
+              // it.
               const guiChanged = definitions.some(
                 (definition) => active.get(definition.id)?.plugin.gui?.revision !== definition.gui?.revision,
               )

@@ -5,7 +5,7 @@ description: "Write a plugin's Electron main-process setup, provide typed IPC co
 
 On OpenCode Desktop, a plugin's `main` setup runs once in the Electron main process as an app-wide singleton. It has
 full access to Node.js built-ins, `electron`, and the main host APIs. Pass it to `Plugin.define` in the plugin's
-[`./gui` file](/build/plugins/gui/package#define-the-gui), beside the window `setup` or on its own.
+[`./gui-experimental` file](/build/plugins/gui/package#define-the-gui), beside the window `setup` or on its own.
 
 ```tsx title="src/gui.tsx"
 import { Schema } from "effect"
@@ -45,7 +45,7 @@ export default Plugin.define({
 })
 ```
 
-In a window, `electron` is an inert placeholder, so the import is safe in the shared `./gui` file. See
+In a window, `electron` is an inert placeholder, so the import is safe in the shared `./gui-experimental` file. See
 [One file, two processes](/build/plugins/gui/package#one-file-two-processes).
 
 ## Main setup in its own file

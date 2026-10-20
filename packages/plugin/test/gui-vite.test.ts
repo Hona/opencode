@@ -34,11 +34,11 @@ test("the preset writes one CommonJS file that requires only what the app provid
   })
 
   await bundle(root)
-  const code = await Bun.file(path.join(root, "dist/gui.cjs")).text()
+  const code = await Bun.file(path.join(root, "dist/gui-experimental.cjs")).text()
   const required = new Set(Array.from(code.matchAll(/require\("([^"]+)"\)/g), (match) => match[1]))
 
   // The page is inlined, not a second chunk the app would never load.
-  expect(await readdir(path.join(root, "dist"))).toEqual(["gui.cjs"])
+  expect(await readdir(path.join(root, "dist"))).toEqual(["gui-experimental.cjs"])
   expect(code).toContain("Notes")
   expect([...required].sort()).toEqual([...hosted, "electron", "node:fs"].sort())
 }, 60_000)

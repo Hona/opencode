@@ -2,8 +2,8 @@ import { expect, test } from "bun:test"
 import path from "node:path"
 import { evaluateMain } from "./module"
 
-// One `./gui` bundle for both processes, as Vite emits it with vite-plugin-solid: Solid's templates and event delegation
-// run at module scope, beside the Node built-ins only the main setup uses.
+// One `./gui-experimental` bundle for both processes, as Vite emits it with vite-plugin-solid: Solid's templates and
+// event delegation run at module scope, beside the Node built-ins only the main setup uses.
 const bundle = `
 const web = require("solid-js/web")
 const path = require("node:path")

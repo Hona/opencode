@@ -6,7 +6,7 @@ description: "See, reload, and troubleshoot plugins in the OpenCode Desktop inte
 OpenCode Desktop lists the plugins that run in its interface under **Settings > Plugins**. The page shows the built-in plugins that ship with the app and the GUI parts of your [plugins](/plugins#desktop).
 
 - **Built-in plugins** ship with the app, carry a **Built-in** label, and always run.
-- **Your plugins** come from `opencode.json(c)`, when the plugin package exports `./gui`. Turn one off with its switch, or remove the plugin from `opencode.json(c)` to remove it.
+- **Your plugins** come from `opencode.json(c)`, when the plugin package exports `./gui-experimental`. Turn one off with its switch, or remove the plugin from `opencode.json(c)` to remove it.
 
 Built-in plugins provide the app's workspace features, such as the [terminal](/desktop/terminal), [review](/desktop/review) panel, and [browser](/desktop/browser).
 
@@ -55,7 +55,7 @@ acme      Server TUI   Reload  [on]
 
 ## Add plugins
 
-Third-party GUI plugins come from [plugins](/plugins) in your configuration. A plugin package that exports `./gui` adds its GUI to the app; there is no separate install step. Add the plugin to your global configuration:
+Third-party GUI plugins come from [plugins](/plugins) in your configuration. A plugin package that exports `./gui-experimental` adds its GUI to the app; there is no separate install step. Add the plugin to your global configuration:
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
@@ -80,7 +80,7 @@ opencode plugin remove opencode-acme
 
 <CardGroup cols={1}>
   <Card title="Build a GUI plugin" href="/build/plugins/gui/package">
-    Add a `./gui` export to your plugin package to ship panels, commands, settings pages, and main-process integrations.
+    Add a `./gui-experimental` export to your plugin package to ship panels, commands, settings pages, and main-process integrations.
   </Card>
 </CardGroup>
 

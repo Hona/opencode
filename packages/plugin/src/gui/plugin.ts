@@ -15,8 +15,8 @@ type Declared<Id extends string, P extends Tokens, U extends Tokens, R extends R
 }
 
 /**
- * A plugin's GUI: the default export of its `./gui` bundle. Its `Declarations`, then a window setup, a main-process
- * setup, or both. The app's built-in plugins declare with it too.
+ * A plugin's GUI: the default export of its `./gui-experimental` bundle. Its `Declarations`, then a window setup, a
+ * main-process setup, or both. The app's built-in plugins declare with it too.
  */
 export type Definition<
   Id extends string = string,
@@ -32,10 +32,10 @@ export type Definition<
 }
 
 /**
- * Defines a plugin's GUI, the default export of its `./gui` bundle, as `Plugin.define` from `@opencode/plugin` and
- * `@opencode/plugin/tui` define its server and terminal halves. `id` must be the server plugin's id. Each setup's
- * context is typed from the declarations. Fails to compile, naming the key, when a key names one token in `provides` and
- * another in `uses`.
+ * Defines a plugin's GUI, the default export of its `./gui-experimental` bundle, as `Plugin.define` from
+ * `@opencode/plugin` and `@opencode/plugin/tui` define its server and terminal halves. `id` must be the server plugin's
+ * id. Each setup's context is typed from the declarations. Fails to compile, naming the key, when a key names one token
+ * in `provides` and another in `uses`.
  *
  * @param plugin - The declarations and at least one setup.
  * @returns The same object.

@@ -27,11 +27,11 @@ const modules = {
 } satisfies Record<PluginModule, () => Promise<object>>
 
 /**
- * Builds a host `Definition` for a plugin's `./gui` bundle, read from the desktop app's own server. The bundle is
- * evaluated here so its `Plugin.define` declares `os`, `provides`, `uses`, `requires` and `stores` before the host gates
- * activation on them. A plugin with only a `main` setup gets an empty window setup, so it still lists as active. A bundle
- * that fails to evaluate, or declares another id, becomes a definition whose entry fails, so Settings > Plugins reports
- * it.
+ * Builds a host `Definition` for a plugin's `./gui-experimental` bundle, read from the desktop app's own server. The
+ * bundle is evaluated here so its `Plugin.define` declares `os`, `provides`, `uses`, `requires` and `stores` before the
+ * host gates activation on them. A plugin with only a `main` setup gets an empty window setup, so it still lists as
+ * active. A bundle that fails to evaluate, or declares another id, becomes a definition whose entry fails, so Settings
+ * > Plugins reports it.
  */
 export async function pluginDefinition(id: string, code: string): Promise<Entry> {
   const loaded = new Map<string, object>(

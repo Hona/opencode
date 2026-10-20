@@ -12,7 +12,8 @@ import type { MainSetup } from "./main.js"
 
 /**
  * A plugin as a host runs it: its `Plugin.Declarations`, plus the setups the host loads lazily. A built-in's entries
- * are its `renderer.tsx` and `main.ts`; a plugin's `./gui` bundle becomes a window entry that runs its `setup`.
+ * are its `renderer.tsx` and `main.ts`; a plugin's `./gui-experimental` bundle becomes a window entry that runs its
+ * `setup`.
  */
 export interface Entry extends Declarations {
   /** Loads the window setup (`Plugin.Setup<typeof definition>`). */
@@ -243,7 +244,7 @@ const nodeBuiltins = new Set([
 
 /**
  * Whether only the desktop app's main process provides a module: `electron` and Node built-ins. A window gives a
- * plugin's `./gui` bundle an inert placeholder for it.
+ * plugin's `./gui-experimental` bundle an inert placeholder for it.
  *
  * @param name - The name the bundle requires.
  * @returns True for `electron`, `node:` names and Node built-ins.
@@ -253,12 +254,12 @@ export function mainOnlyModule(name: string) {
 }
 
 /**
- * A placeholder for a module that exists only in the other process, so one plugin `./gui` bundle runs in both: a window
- * gets one for `electron` and Node built-ins, main gets one for Solid and the window-only modules. Bundlers hoist
- * `require` calls and Solid hoists template creation to module scope, so the placeholder accepts any property read,
- * call or construction and returns itself, and ignores writes. It is never a thenable, so a promise never waits on
- * it, and nothing is an instance of it. Code that actually runs in the wrong process gets placeholders back instead of
- * working values; keep each process's code in its entry.
+ * A placeholder for a module that exists only in the other process, so one plugin `./gui-experimental` bundle runs in
+ * both: a window gets one for `electron` and Node built-ins, main gets one for Solid and the window-only modules.
+ * Bundlers hoist `require` calls and Solid hoists template creation to module scope, so the placeholder accepts any
+ * property read, call or construction and returns itself, and ignores writes. It is never a thenable, so a promise
+ * never waits on it, and nothing is an instance of it. Code that actually runs in the wrong process gets placeholders
+ * back instead of working values; keep each process's code in its entry.
  *
  * @param name - The module's name, shown when the placeholder is converted to a string.
  * @returns The placeholder.
@@ -292,7 +293,7 @@ export function inertModule(name: string): InertModule {
 /** A placeholder `inertModule` returns: it answers every property read, call and construction with itself. */
 export type InertModule = () => void
 
-/** A plugin's `./gui` bundle as `evaluatePluginBundle` read it. */
+/** A plugin's `./gui-experimental` bundle as `evaluatePluginBundle` read it. */
 export interface PluginBundle {
   /** The declarations of its `Plugin.define`, checked. */
   readonly definition: Declarations
@@ -302,7 +303,7 @@ export interface PluginBundle {
   readonly main?: MainSetup
 }
 
-/** The process that evaluates a plugin's `./gui` bundle with `evaluatePluginBundle`. */
+/** The process that evaluates a plugin's `./gui-experimental` bundle with `evaluatePluginBundle`. */
 export interface PluginBundleHost {
   /** The server plugin's id, which the GUI must declare. */
   readonly id: string
@@ -323,10 +324,10 @@ export interface PluginBundleHost {
 }
 
 /**
- * Evaluates a plugin's `./gui` bundle, a CommonJS module whose default export is its `Plugin.define`, and checks it:
- * the declarations the host reads, the server plugin's id, and at least one setup. Both hosts call it, each with its own
- * `require`. The bundle's code is trusted as much as the server that runs the app, which already runs the plugin's
- * server entry.
+ * Evaluates a plugin's `./gui-experimental` bundle, a CommonJS module whose default export is its `Plugin.define`, and
+ * checks it: the declarations the host reads, the server plugin's id, and at least one setup. Both hosts call it, each
+ * with its own `require`. The bundle's code is trusted as much as the server that runs the app, which already runs the
+ * plugin's server entry.
  *
  * @param code - The bundle's CommonJS code.
  * @param host - The process evaluating it.
@@ -343,7 +344,9 @@ export function evaluatePluginBundle(code: string, host: PluginBundleHost): Plug
   const plugin = Predicate.hasProperty(module.exports, "default") ? module.exports.default : module.exports
 
   if (!matchesPlugin(plugin) || (host.process === "window" && !matchesDependencies(plugin)))
-    throw new Error("A plugin's ./gui bundle must default-export a `Plugin.define` from `@opencode/plugin/gui`")
+    throw new Error(
+      "A plugin's ./gui-experimental bundle must default-export a `Plugin.define` from `@opencode/plugin/gui`",
+    )
 
   if (plugin.id !== id) throw new Error(`A plugin's GUI must take its server plugin's id "${id}", not "${plugin.id}"`)
 
@@ -475,10 +478,10 @@ export interface Installed {
 
 /**
  * Whether a server plugin's GUI loads: an active plugin with an id, not one of the server's own built-ins, that exports
- * `./gui`. Main lists plugins with it; `pluginIdAvailable` then checks the id against the built-ins.
+ * `./gui-experimental`. Main lists plugins with it; `pluginIdAvailable` then checks the id against the built-ins.
  *
  * @param plugin - A plugin as the server lists it.
- * @returns True when the plugin's `./gui` bundle should load.
+ * @returns True when the plugin's `./gui-experimental` bundle should load.
  */
 export function shipsPluginGui(plugin: PluginInfo): plugin is PluginInfo & {
   /** The server plugin's id, which its GUI takes. */
@@ -654,8 +657,9 @@ export interface Bridge {
     }[],
   ): void
   /**
-   * The plugin GUIs main runs. Main lists the plugins on the desktop app's own server and reads their `./gui` bundles
-   * itself, following that server's `plugin.updated` event; a `pluginGuis` message brings each change after this.
+   * The plugin GUIs main runs. Main lists the plugins on the desktop app's own server and reads their
+   * `./gui-experimental` bundles itself, following that server's `plugin.updated` event; a `pluginGuis` message brings
+   * each change after this.
    *
    * @returns The plugins whose GUI loads, and the ids a built-in claims.
    */

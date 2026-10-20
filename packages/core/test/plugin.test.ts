@@ -123,7 +123,7 @@ it.live("serves a local plugin's GUI bundle, and reloads it alone when only the 
         path.join(directory, "index.ts"),
         `import { appendFileSync } from "node:fs"\nexport default { id: "fixture.gui", setup() { appendFileSync(${JSON.stringify(starts)}, "x") } }`,
       )
-      await writeFile(path.join(directory, "gui.js"), bundle)
+      await writeFile(path.join(directory, "gui-experimental.js"), bundle)
     })
     const updates: string[] = []
     yield* Effect.acquireRelease(
@@ -153,7 +153,7 @@ it.live("serves a local plugin's GUI bundle, and reloads it alone when only the 
 
     // Editing only the bundle reloads the GUI, as editing a TUI entry reloads only the TUI: the server entry keeps
     // running, and the app hears of the new bundle.
-    yield* Effect.promise(() => writeFile(path.join(directory, "gui.js"), `${bundle}\n// edited`))
+    yield* Effect.promise(() => writeFile(path.join(directory, "gui-experimental.js"), `${bundle}\n// edited`))
     const edited = yield* load
     const published = updates.length
     yield* plugins.activate([edited])

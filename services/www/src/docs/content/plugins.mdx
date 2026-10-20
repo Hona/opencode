@@ -126,10 +126,10 @@ opencode service restart
 
 ## Desktop
 
-A plugin that exports `./gui` is also a GUI plugin: it adds panels, commands, or settings to the desktop app.
-The app loads it from the server that runs the app, so configure the plugin in the global `opencode.json(c)` to make it
-available in every window. Turn it off in [**Settings > Plugins**](/desktop/plugins). See
-[GUI plugin packages](/build/plugins/gui/package).
+A plugin that exports `./gui-experimental` is also a GUI plugin: it adds panels, commands, or settings to the desktop
+app. The app loads it from the server that runs the app, so configure the plugin in the global `opencode.json(c)` to
+make it available in every window. Turn it off in [**Settings > Plugins**](/desktop/plugins). See [GUI plugin
+packages](/build/plugins/gui/package).
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {

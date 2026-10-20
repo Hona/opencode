@@ -34,7 +34,7 @@ src/pairing/
 
 Unit tests of logic that carries a contract sit beside the code as `*.test.ts`, as in `src/ssh/` and `src/updater/`.
 
-`Plugin.define` is the manifest, the same call a third-party plugin's `./gui` makes. The host lists attach each built-in's lazy `windowEntry` and `mainEntry`. The host reads the manifest before any entry loads.
+`Plugin.define` is the manifest, the same call a third-party plugin's `./gui-experimental` makes. The host lists attach each built-in's lazy `windowEntry` and `mainEntry`. The host reads the manifest before any entry loads.
 
 | Field      | What it declares                                                              | In the context                                    |
 | ---------- | ----------------------------------------------------------------------------- | ------------------------------------------------- |

@@ -6,7 +6,7 @@ import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import { pluginDefinition } from "./module"
 
-/** A plugin's `./gui` bundle as this window evaluated it, at one revision. */
+/** A plugin's `./gui-experimental` bundle as this window evaluated it, at one revision. */
 type Loaded = {
   readonly id: string
   readonly revision: string
@@ -22,9 +22,10 @@ export type PluginGui = {
 }
 
 /**
- * Loads the plugin GUIs main runs. Main alone lists the plugins on the desktop app's own server and reads their `./gui`
- * bundles; this window evaluates what main sends, so every window and main run the same set. That server already runs
- * the plugins' server entries, so their bundles add no new source of code; other servers' plugins load no GUI.
+ * Loads the plugin GUIs main runs. Main alone lists the plugins on the desktop app's own server and reads their
+ * `./gui-experimental` bundles; this window evaluates what main sends, so every window and main run the same set. That
+ * server already runs the plugins' server entries, so their bundles add no new source of code; other servers' plugins
+ * load no GUI.
  *
  * Mounted below the app's server providers, which the plugin root sits above, for the client of that server; it
  * hands the definitions up through `onChange` rather than the root reading them.

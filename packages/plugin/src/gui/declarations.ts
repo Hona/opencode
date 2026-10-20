@@ -19,10 +19,10 @@ export interface Declarations<
   S extends Stores = Stores,
 > {
   /**
-   * The plugin's id; a plugin's `./gui` takes its server plugin's id and fails to load with another. It prefixes every
-   * id the plugin creates: commands (`<id>.<command>`), panel keys (`<id>:<tab>`), stored keys (`extension.<id>.<key>`),
-   * and its contract and Ipc ids (`<id>` or `<id>.<name>`). Changing it moves all of those; migrate them as the guide
-   * describes.
+   * The plugin's id; a plugin's `./gui-experimental` takes its server plugin's id and fails to load with another. It
+   * prefixes every id the plugin creates: commands (`<id>.<command>`), panel keys (`<id>:<tab>`), stored keys
+   * (`extension.<id>.<key>`), and its contract and Ipc ids (`<id>` or `<id>.<name>`). Changing it moves all of those;
+   * migrate them as the guide describes.
    */
   readonly id: Id
   /**
@@ -40,9 +40,9 @@ export interface Declarations<
   readonly provides?: P
   /**
    * Optional dependencies that other plugins provide. Each is a `Live` accessor in `ctx.uses`: pending while its
-   * provider loads, inactive while it is disabled, failed, blocked or restarting. The plugin must keep working while one
-   * is inactive. Your own tokens need no entry: `provides` already puts them in `ctx.uses`. A key that names one token
-   * in `provides` and another here fails to compile (`Conflict<"key">`).
+   * provider loads, inactive while it is disabled, failed, blocked or restarting. The plugin must keep working while
+   * one is inactive. Your own tokens need no entry: `provides` already puts them in `ctx.uses`. A key that names one
+   * token in `provides` and another here fails to compile (`Conflict<"key">`).
    */
   readonly uses?: U
   /**

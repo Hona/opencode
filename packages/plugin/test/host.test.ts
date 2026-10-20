@@ -161,12 +161,12 @@ describe("Host.resolve", () => {
           exports: {
             ".": "./dist/server.js",
             "./tui": "./dist/tui.js",
-            "./gui": "./dist/gui.cjs",
+            "./gui-experimental": "./dist/gui-experimental.cjs",
           },
         }),
         "dist/server.js": source,
         "dist/tui.js": source,
-        "dist/gui.cjs": source,
+        "dist/gui-experimental.cjs": source,
       },
       true,
     )
@@ -174,17 +174,17 @@ describe("Host.resolve", () => {
       server: plugin.url("dist/server.js"),
       tui: plugin.url("dist/tui.js"),
       rpc: undefined,
-      gui: plugin.url("dist/gui.cjs"),
+      gui: plugin.url("dist/gui-experimental.cjs"),
     })
   })
 
   it("resolves the conventional GUI entrypoint in a local directory", async () => {
-    await using plugin = await fixture({ "index.ts": source, "gui.js": source })
+    await using plugin = await fixture({ "index.ts": source, "gui-experimental.js": source })
     assert.deepEqual(Host.resolve(plugin.target), {
       server: plugin.url("index.ts"),
       tui: undefined,
       rpc: undefined,
-      gui: plugin.url("gui.js"),
+      gui: plugin.url("gui-experimental.js"),
     })
   })
 
@@ -192,9 +192,12 @@ describe("Host.resolve", () => {
     await using local = await fixture({ "index.ts": source, "gui.tsx": source })
     await using published = await fixture(
       {
-        "package.json": JSON.stringify({ name, exports: { ".": "./dist/server.js", "./gui": "./dist/gui.mjs" } }),
+        "package.json": JSON.stringify({
+          name,
+          exports: { ".": "./dist/server.js", "./gui-experimental": "./dist/gui-experimental.mjs" },
+        }),
         "dist/server.js": source,
-        "dist/gui.mjs": source,
+        "dist/gui-experimental.mjs": source,
       },
       true,
     )
