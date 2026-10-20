@@ -144,6 +144,7 @@ export type IconName =
   | "trash"
   | "unified"
   | "warning"
+  | "waveform"
   | "window-analytics"
   | "window-cursor"
   | "workspace"
