@@ -18,7 +18,7 @@ if ((await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode ==
 }
 
 try {
-  await $`bun run typecheck`
+  await $`bun run typecheck:tsc`
   await $`bun run test`
   await pack()
   await $`npm publish ${tarball} --access public --tag ${Script.channel}`

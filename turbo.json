@@ -31,6 +31,24 @@
     "@opencode/tui#typecheck": {
       "dependsOn": ["@opencode/core#typecheck"]
     },
+    // CI checks types with the official TypeScript compiler; local `typecheck` uses `bun check`. tsc -b writes core's
+    // declarations for the packages that reference it, so those packages wait for core.
+    "typecheck:tsc": {},
+    "@opencode/cli#typecheck:tsc": {
+      "dependsOn": ["@opencode/core#typecheck:tsc"]
+    },
+    "@opencode/sdk#typecheck:tsc": {
+      "dependsOn": ["@opencode/core#typecheck:tsc"]
+    },
+    "@opencode/server#typecheck:tsc": {
+      "dependsOn": ["@opencode/core#typecheck:tsc"]
+    },
+    "@opencode/simulation#typecheck:tsc": {
+      "dependsOn": ["@opencode/core#typecheck:tsc"]
+    },
+    "@opencode/tui#typecheck:tsc": {
+      "dependsOn": ["@opencode/core#typecheck:tsc"]
+    },
     "build": {
       "dependsOn": ["transit"],
       "outputs": ["dist/**"]
