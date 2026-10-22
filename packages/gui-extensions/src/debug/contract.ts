@@ -15,8 +15,8 @@ export const HeapSnapshots = Ipc.define({
      */
     write: {
       input: Schema.Struct({
-        /** The server to capture, as `ServerRef.id`. */
-        server: Schema.String,
+        /** The server to capture, as `ServerRef.id`; omitted when the window has none. */
+        server: Schema.optional(Schema.String),
       }),
       output: Schema.Struct({
         /** The new folder. */

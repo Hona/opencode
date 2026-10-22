@@ -7,7 +7,7 @@ import type { ServerEndpoint } from "../sdk/main"
 /**
  * What the manifest records about the server's snapshot.
  * - `file`: moved into the folder, named `server-<pid>.heapsnapshot`.
- * - `path`: left where the server wrote it, because the server runs on another machine.
+ * - `path`: left where the server wrote it, because the server runs on another machine or the move failed.
  * - `error`: nothing was captured.
  */
 export type ServerSnapshot =
@@ -44,13 +44,18 @@ async function request(endpoint: ServerEndpoint, directory: string, signal: Abor
   if (!endpoint.local) return { process: "server", pid: snapshot.pid, path: snapshot.path }
   const file = `server-${snapshot.pid}.heapsnapshot`
   const target = path.join(directory, file)
-  // A rename fails across volumes, e.g. when Downloads is on another drive.
-  await rename(snapshot.path, target).catch(async () => {
-    await copyFile(snapshot.path, target)
-    await rm(snapshot.path)
-  })
 
-  return { process: "server", pid: snapshot.pid, file }
+  // A rename fails across volumes, e.g. when Downloads is on another drive. When the copy fails too, the snapshot
+  // still exists where the server wrote it.
+  return rename(snapshot.path, target)
+    .catch(async () => {
+      await copyFile(snapshot.path, target)
+      await rm(snapshot.path)
+    })
+    .then(
+      (): ServerSnapshot => ({ process: "server", pid: snapshot.pid, file }),
+      (): ServerSnapshot => ({ process: "server", pid: snapshot.pid, path: snapshot.path }),
+    )
 }
 
 // Servers released before the endpoint answer 404.

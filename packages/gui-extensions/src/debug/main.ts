@@ -19,21 +19,28 @@ type Queue = { tail: Promise<unknown> }
 const setup: MainSetup<typeof definition> = (ctx) => {
   const queue: Queue = { tail: Promise.resolve() }
 
-  const capture = async (server: string) => {
+  const capture = async (server: string | undefined) => {
     const directory = path.join(
       app.getPath("downloads"),
       `opencode-heap-${new Date().toISOString().replace(/[:.]/g, "")}`,
     )
 
-    // Snapshots hold prompts, file contents and credentials.
-    await mkdir(directory, { mode: 0o700 })
+    // Snapshots hold prompts, file contents and credentials. Recursive, because Downloads can be missing on Linux.
+    await mkdir(directory, { recursive: true, mode: 0o700 })
     ctx.log.write("info", "capturing heap snapshots", { directory, server })
 
-    // Each window and the server are separate processes, so they serialize their heaps at the same time. Main goes
+    // The server is another process, so it serializes its heap while the windows do. Windows go one at a time: a
+    // snapshot can double a process's memory, and a leaking app may not have room for every window at once. Main goes
     // last: writing its own heap blocks the loop that receives the others.
     const [serverSnapshot, windows] = await Promise.all([
-      captureServer(ctx.serverEndpoints.get(server), directory, ctx.scope.signal),
-      Promise.all(ctx.windows.list().map((window) => captureWindow(window, directory))),
+      captureServer(server === undefined ? undefined : ctx.serverEndpoints.get(server), directory, ctx.scope.signal),
+      (async () => {
+        const list: Snapshot[] = []
+
+        for (const window of ctx.windows.list()) list.push(await captureWindow(window, directory))
+
+        return list
+      })(),
     ])
 
     const main = await Promise.resolve()
@@ -62,6 +69,7 @@ const setup: MainSetup<typeof definition> = (ctx) => {
           snapshots,
           // Per-process memory as the OS sees it: a process that grows while its heap does not leaks native memory.
           metrics: app.getAppMetrics(),
+          metricsMemoryUnit: "KiB",
           mainMemory: process.memoryUsage(),
         },
         null,
