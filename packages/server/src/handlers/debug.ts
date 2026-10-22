@@ -24,8 +24,12 @@ export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers)
               return Effect.logError("failed to write heap snapshot", { cause }).pipe(
                 Effect.annotateLogs({ ref }),
                 Effect.andThen(
+                  // The reason (a missing permission, a file where the directory should be) is usually the caller's to fix.
                   Effect.fail(
-                    new UnknownError({ message: "Failed to write heap snapshot. Check server logs for details.", ref }),
+                    new UnknownError({
+                      message: `Failed to write heap snapshot: ${cause.cause instanceof Error ? cause.cause.message : cause.message}`,
+                      ref,
+                    }),
                   ),
                 ),
               )
