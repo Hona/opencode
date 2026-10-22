@@ -1,7 +1,7 @@
 export default {
   "command.toggle": "Toggle debug bar",
   "command.heap": "Capture heap snapshots",
-  "command.heap.description": "Saves the memory of the app and its server to a folder, for finding leaks",
+  "command.heap.description": "Saves the memory of the app and its server to a folder",
   "heap.loading": "Capturing heap snapshots…",
   "heap.done": "Heap snapshots saved",
   "heap.partial": "Some heap snapshots failed. See manifest.json.",
