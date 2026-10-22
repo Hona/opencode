@@ -1458,18 +1458,9 @@
 }
 
 [data-component="accordion"][data-scope="apply-patch"] {
+  /* Keep the sticky header square so its page-colored corners hide the diff scrolling under the rounded trigger. */
   [data-slot="accordion-header"] {
     background-color: var(--v2-background-bg-base);
-  }
-
-  [data-slot="accordion-item"]:first-child > [data-slot="accordion-header"] {
-    border-top-left-radius: var(--radius-lg);
-    border-top-right-radius: var(--radius-lg);
-  }
-
-  [data-slot="accordion-item"]:last-child:not([data-expanded]) > [data-slot="accordion-header"] {
-    border-bottom-left-radius: var(--radius-lg);
-    border-bottom-right-radius: var(--radius-lg);
   }
 
   [data-slot="apply-patch-trigger-content"] {
