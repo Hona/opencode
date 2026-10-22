@@ -141,7 +141,15 @@ grep 'role=server' ~/.local/share/opencode/log/opencode-local.log
 
 ## Heap snapshots
 
-The CLI installs a `SIGUSR1` listener on non-Windows processes in `packages/cli/src/heap.ts`. Use it to capture the installed `opencode2` server without restarting it or attaching an inspector.
+On every platform, including Windows, capture the running background server without restarting it or attaching an inspector:
+
+```bash
+opencode2 debug heap-dump
+```
+
+It discovers the already-running service (never starts or replaces one), calls `POST /api/debug/heap-dump`, waits until the file is complete, and prints its server-local path. Pass `--server <url>` (with `OPENCODE_PASSWORD`) for a server started with `serve`. A 404 means the running server predates the endpoint.
+
+The Unix `SIGUSR1` listener in `packages/cli/src/heap.ts` shares the same writer (`packages/util/src/heap-snapshot.ts`) and is still useful for a process that is not an HTTP server, such as a TUI client:
 
 1. Find the processes and inspect their roles and memory:
 
