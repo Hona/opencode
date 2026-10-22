@@ -8,6 +8,7 @@ import { pack } from "./pack"
 
 process.chdir(fileURLToPath(new URL("..", import.meta.url)))
 
+// SAFETY: this package's own package.json always declares a string name and version.
 const pkg = (await Bun.file("package.json").json()) as { name: string; version: string }
 
 const tarball = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`
