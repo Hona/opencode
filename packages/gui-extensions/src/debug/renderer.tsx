@@ -40,18 +40,9 @@ const setup: Setup<typeof Debug> = (ctx) => {
           return ctx.t("command.category.settings")
         },
         run: async () => {
-          // The window's own server: the routed session's, else the desktop's. Without one, main still captures the
-          // desktop and records why the server is missing.
-          const server =
-            ctx.sessions.current()?.server.id ??
-            ctx.servers
-              .list()
-              .map((id) => ctx.servers.get(id))
-              .find((item) => item?.builtin)?.id
-
           const loading = showToast({ variant: "loading", title: ctx.t("heap.loading"), persistent: true })
 
-          const result = await heap.write({ server }, { signal: ctx.signal }).catch(() => undefined)
+          const result = await heap.write({ signal: ctx.signal }).catch(() => undefined)
 
           toaster.dismiss(loading)
 

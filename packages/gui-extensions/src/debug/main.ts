@@ -19,7 +19,7 @@ type Queue = { tail: Promise<unknown> }
 const setup: MainSetup<typeof definition> = (ctx) => {
   const queue: Queue = { tail: Promise.resolve() }
 
-  const capture = async (server: string | undefined) => {
+  const capture = async () => {
     const directory = path.join(
       app.getPath("downloads"),
       `opencode-heap-${new Date().toISOString().replace(/[:.]/g, "")}`,
@@ -27,13 +27,13 @@ const setup: MainSetup<typeof definition> = (ctx) => {
 
     // Snapshots hold prompts, file contents and credentials. Recursive, because Downloads can be missing on Linux.
     await mkdir(directory, { recursive: true, mode: 0o700 })
-    ctx.log.write("info", "capturing heap snapshots", { directory, server })
+    ctx.log.write("info", "capturing heap snapshots", { directory })
 
     // The server is another process, so it serializes its heap while the windows do. Windows go one at a time: a
     // snapshot can double a process's memory, and a leaking app may not have room for every window at once. Main goes
     // last: writing its own heap blocks the loop that receives the others.
     const [serverSnapshot, windows] = await Promise.all([
-      captureServer(server === undefined ? undefined : ctx.serverEndpoints.get(server), directory, ctx.scope.signal),
+      captureServer(ctx.serverEndpoints.get("sidecar"), directory, ctx.scope.signal),
       (async () => {
         const list: Snapshot[] = []
 
@@ -85,8 +85,8 @@ const setup: MainSetup<typeof definition> = (ctx) => {
 
   ctx.provide(HeapSnapshots, {
     // A window that closes meanwhile does not cancel the capture.
-    write: (input) => {
-      const run = queue.tail.then(() => capture(input.server))
+    write: () => {
+      const run = queue.tail.then(capture)
       queue.tail = run.catch(() => undefined)
 
       return run

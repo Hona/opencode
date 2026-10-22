@@ -141,13 +141,15 @@ each part of the app:
 
 ```text
 opencode-heap-2026-10-23T013012345Z/
-  server-48213.heapsnapshot    the server the window uses
+  server-48213.heapsnapshot    the desktop's own server
   window-1-48390.heapsnapshot  one per app window
   main-48102.heapsnapshot      the desktop main process
   manifest.json                processes, PIDs, and per-process memory; written last
 ```
 
-- A server on another machine keeps its snapshot there. `manifest.json` records its path.
+- Remote servers are not captured. Use `opencode debug heap-dump` on that machine instead.
+- Snapshots are large, so the server's file is moved, never copied. If it cannot be moved, for example because Downloads
+  is on another drive, it stays in the server's log directory and `manifest.json` records its path.
 - Browser tabs are not included, because their snapshots contain the content of the pages you visited.
 
 ## Capture CPU and memory profiles

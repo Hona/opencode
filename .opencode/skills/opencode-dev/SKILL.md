@@ -132,7 +132,7 @@ opencode debug heap-dump
 
 It discovers the already-running service (never starts or replaces one), calls `POST /api/debug/heap-dump`, waits until the file is complete, and prints its server-local path. Pass `--server <url>` (with `OPENCODE_PASSWORD`) for a server started with `serve`. A 404 means the running server predates the endpoint.
 
-For desktop memory, run **Capture heap snapshots** from the desktop command palette (`packages/gui-extensions/src/debug/main.ts`). It writes `~/Downloads/opencode-heap-<time>/` with the window's server, every app window renderer, and the Electron main process, plus a `manifest.json` (PIDs and `app.getAppMetrics()`) written last. In a dev desktop build you can drive it over CDP (`OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT`, default 9222): press `Control+Shift+P`, type `heap snapshots`, press Enter.
+For desktop memory, run **Capture heap snapshots** from the desktop command palette (`packages/gui-extensions/src/debug/main.ts`). It writes `~/Downloads/opencode-heap-<time>/` with the desktop's own (local) server, renamed in and never copied, every app window renderer, and the Electron main process, plus a `manifest.json` (PIDs and `app.getAppMetrics()`) written last. In a dev desktop build you can drive it over CDP (`OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT`, default 9222): press `Control+Shift+P`, type `heap snapshots`, press Enter.
 
 The Unix `SIGUSR1` listener in `packages/cli/src/heap.ts` shares the same writer (`packages/util/src/heap-snapshot.ts`) and is still useful for a process that is not an HTTP server, such as a TUI client:
 
