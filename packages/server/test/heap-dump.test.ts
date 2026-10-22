@@ -85,7 +85,9 @@ it.live(
       expect(yield* Effect.promise(() => failed.json())).toMatchObject({
         _tag: "UnknownError",
         // The filesystem's own reason, naming the path it could not create.
-        message: expect.stringMatching(new RegExp(`^Failed to write heap snapshot: E[A-Z]+: .*${RegExp.escape(api.log)}`)),
+        message: expect.stringMatching(
+          new RegExp(`^Failed to write heap snapshot: E[A-Z]+: .*${RegExp.escape(api.log)}`),
+        ),
         ref: expect.stringMatching(/^err_/),
       })
 
