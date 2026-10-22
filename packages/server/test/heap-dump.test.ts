@@ -22,8 +22,18 @@ const server = Effect.fnUntraced(function* (root: string) {
     },
     { overrides: [Global.node.replace(Global.layerWith({ config: path.join(root, "config"), log }))] },
   )
-  const dump = (headers: Record<string, string> = { authorization }) =>
-    Effect.promise(() => handler(new Request("http://opencode.local/api/debug/heap-dump", { method: "POST", headers })))
+  const dump = (headers: Record<string, string> = { authorization }, directory?: string) =>
+    Effect.promise(() =>
+      handler(
+        new Request(
+          `http://opencode.local/api/debug/heap-dump${directory === undefined ? "" : `?directory=${encodeURIComponent(directory)}`}`,
+          {
+            method: "POST",
+            headers,
+          },
+        ),
+      ),
+    )
   return { log, dump }
 })
 
@@ -83,6 +93,29 @@ it.live(
       expect(recovered.status).toBe(200)
       const result: { path: string } = yield* Effect.promise(() => recovered.json())
       expect(yield* Effect.promise(() => Bun.file(result.path).exists())).toBe(true)
+    }),
+  30_000,
+)
+
+it.live(
+  "writes into a requested directory, creating it, and rejects a relative one",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-heap-dump-")))
+      const api = yield* server(root.path)
+      const directory = path.join(root.path, "capture", "nested")
+
+      const relative = yield* api.dump(undefined, "capture")
+      expect(relative.status).toBe(400)
+      expect(yield* Effect.promise(() => relative.json())).toMatchObject({ _tag: "InvalidRequestError" })
+
+      const written = yield* api.dump(undefined, directory)
+      expect(written.status).toBe(200)
+      const result: { path: string } = yield* Effect.promise(() => written.json())
+      expect(path.dirname(result.path)).toBe(directory)
+      expect(yield* Effect.promise(() => fs.readdir(directory))).toEqual([path.basename(result.path)])
+      const logged = yield* Effect.promise(() => fs.readdir(api.log).catch(() => []))
+      expect(logged.filter((file) => file.endsWith(".heapsnapshot"))).toEqual([])
     }),
   30_000,
 )

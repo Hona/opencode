@@ -13420,7 +13420,24 @@
       "post": {
         "tags": ["debug"],
         "operationId": "debug.heapDump",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Absolute server-local directory to write the snapshot into, created when missing. Defaults to the server's log directory."
+            },
+            "required": false
+          }
+        ],
         "security": [],
         "responses": {
           "200": {
@@ -13474,7 +13491,7 @@
             }
           }
         },
-        "description": "Write a JavaScript heap snapshot of the server process into its log directory and return the server-local path once the file is complete. Pauses the server while the heap serializes and can temporarily increase its memory use. The snapshot can contain credentials, prompts, and file contents.",
+        "description": "Write a JavaScript heap snapshot of the server process into its log directory, or the requested directory, and return the server-local path once the file is complete. Pauses the server while the heap serializes and can temporarily increase its memory use. The snapshot can contain credentials, prompts, and file contents.",
         "summary": "Write a heap snapshot"
       }
     },

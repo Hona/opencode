@@ -2,6 +2,7 @@ import { ClientError, OpenCode } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
 import { Effect, Option, Predicate } from "effect"
 import { EOL } from "node:os"
+import path from "node:path"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { ServerConnection } from "../../../services/server-connection"
@@ -13,8 +14,14 @@ const handler = Effect.fn("cli.debug.heap-dump")(function* (
 ) {
   const endpoint = yield* running(Option.getOrUndefined(input.server))
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
+  // The server writes the file, so a relative directory resolves against this shell. An absolute one passes through
+  // untouched, which keeps a POSIX path for a remote server intact on Windows.
+  const directory = Option.match(input.directory, {
+    onNone: () => undefined,
+    onSome: (value) => (path.isAbsolute(value) ? value : path.resolve(value)),
+  })
   const snapshot = yield* Effect.tryPromise({
-    try: (signal) => client.debug.heapDump({ signal }),
+    try: (signal) => client.debug.heapDump({ directory }, { signal }),
     catch: (cause) =>
       cause instanceof ClientError &&
       cause.reason === "UnexpectedStatus" &&
@@ -23,6 +30,9 @@ const handler = Effect.fn("cli.debug.heap-dump")(function* (
         ? new Error(`The server at ${endpoint.url} does not support heap dumps. Update and restart it first.`)
         : cause,
   })
+  // Servers released before `directory` existed ignore it and write into their log directory.
+  if (directory !== undefined && path.dirname(snapshot.path) !== path.normalize(directory))
+    process.stderr.write(`The server ignored --directory. Update and restart it to choose where snapshots go.${EOL}`)
   process.stdout.write(snapshot.path + EOL)
 })
 

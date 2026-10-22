@@ -35,6 +35,30 @@ test("prints the snapshot path from the registered server without replacing it",
   expect(await Bun.file(registration.file).json()).toEqual(registration.info)
 })
 
+test("sends --directory as an absolute path and warns when the server ignores it", async () => {
+  await using root = await tmpdir()
+  // The command runs from packages/cli (see `cli`), so a relative directory resolves there.
+  const directory = path.join(import.meta.dir, "..", "snapshots")
+  const sent: Array<string | null> = []
+  using server = fake((request) => {
+    sent.push(new URL(request.url).searchParams.get("directory"))
+    // Answer like a current server for the first request and like one that predates `directory` for the second.
+    const folder = sent.length === 1 ? directory : "/server/log"
+    return Response.json({ path: path.join(folder, "heap-1-2.heapsnapshot"), pid: process.pid })
+  })
+  await register(root.path, server.url.href)
+
+  const current = await cli(root.path, ["debug", "heap-dump", "--directory", "snapshots"])
+  const old = await cli(root.path, ["debug", "heap-dump", "--directory", "snapshots"])
+
+  expect(sent).toEqual([directory, directory])
+  expect([current, old].map((result) => ({ code: result.code, stderr: result.stderr.trim() }))).toEqual([
+    { code: 0, stderr: "" },
+    { code: 0, stderr: "The server ignored --directory. Update and restart it to choose where snapshots go." },
+  ])
+  expect(current.stdout.trim()).toBe(path.join(directory, "heap-1-2.heapsnapshot"))
+})
+
 test("fails without starting a server when none is registered", async () => {
   await using root = await tmpdir()
 

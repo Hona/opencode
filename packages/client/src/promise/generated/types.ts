@@ -6019,6 +6019,8 @@ export type VcsDiffInput = {
 
 export type VcsDiffOutput = { location: LocationPublicRef; data: Array<FileDiffInfo> }
 
+export type DebugHeapDumpInput = { readonly directory?: { readonly directory?: string | undefined }["directory"] }
+
 export type DebugHeapDumpOutput = { path: string; pid: number }
 
 export type DebugLocationListOutput = Array<LocationPublicRef>

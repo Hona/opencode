@@ -125,8 +125,15 @@ The command waits until the snapshot is complete, then prints its path:
 /home/me/.local/share/opencode/log/heap-48213-2026-10-23T013012345Z.heapsnapshot
 ```
 
+Write it somewhere else with `--directory`. The server creates the directory when it is missing:
+
+```bash
+opencode debug heap-dump --directory ./snapshots
+```
+
 - It only uses a server that is already running. It never starts, replaces, or restarts one.
 - Use `--server <url>` to capture a server you started with `opencode serve`. Set `OPENCODE_PASSWORD` if it has one.
+  `--directory` is then a path on the server's machine.
 - Open the file in the Memory panel of Chrome DevTools.
 
 <Callout type="warning">
@@ -141,15 +148,14 @@ each part of the app:
 
 ```text
 opencode-heap-2026-10-23T013012345Z/
-  server-48213.heapsnapshot    the desktop's own server
+  heap-48213-….heapsnapshot    the desktop's own server
   window-1-48390.heapsnapshot  one per app window
   main-48102.heapsnapshot      the desktop main process
   manifest.json                processes, PIDs, and per-process memory; written last
 ```
 
 - Remote servers are not captured. Use `opencode debug heap-dump` on that machine instead.
-- Snapshots are large, so the server's file is moved, never copied. If it cannot be moved, for example because Downloads
-  is on another drive, it stays in the server's log directory and `manifest.json` records its path.
+- The server writes its snapshot straight into the folder, so nothing large is moved or copied.
 - Browser tabs are not included, because their snapshots contain the content of the pages you visited.
 
 ## Capture CPU and memory profiles
