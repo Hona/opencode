@@ -1,5 +1,6 @@
+import { showToast, toaster } from "@opencode/ui/toast"
 import { createSignal, lazy, Show, Suspense } from "solid-js"
-import { Command, Slot, TitlebarItem, type Setup } from "../sdk"
+import { createKeyed, Command, Slot, TitlebarItem, type Setup } from "../sdk"
 import type Debug from "./index"
 
 const setup: Setup<typeof Debug> = (ctx) => {
@@ -21,6 +22,54 @@ const setup: Setup<typeof Debug> = (ctx) => {
       run: toggle,
     }),
   )
+
+  const desktop = ctx.desktop
+
+  // Offered only while main answers: never on the web, and not while the extension restarts.
+  if (desktop)
+    createKeyed(ctx.uses.heap, (heap) =>
+      ctx.add(Command, {
+        id: "heap",
+        get title() {
+          return ctx.t("command.heap")
+        },
+        get description() {
+          return ctx.t("command.heap.description")
+        },
+        get group() {
+          return ctx.t("command.category.settings")
+        },
+        run: async () => {
+          // The window's own server: the routed session's, else the desktop's.
+          const server =
+            ctx.sessions.current()?.server.id ??
+            ctx.servers
+              .list()
+              .map((id) => ctx.servers.get(id))
+              .find((item) => item?.builtin)?.id
+
+          if (!server) return void showToast({ variant: "error", title: ctx.t("heap.failed") })
+
+          const loading = showToast({ variant: "loading", title: ctx.t("heap.loading"), persistent: true })
+
+          const result = await heap.write({ server }, { signal: ctx.signal }).catch(() => undefined)
+
+          toaster.dismiss(loading)
+
+          if (ctx.signal.aborted) return
+
+          if (!result) return void showToast({ variant: "error", title: ctx.t("heap.failed") })
+
+          showToast({
+            variant: result.complete ? "success" : "error",
+            title: ctx.t(result.complete ? "heap.done" : "heap.partial"),
+            description: result.directory,
+            persistent: true,
+            actions: [{ label: ctx.t("heap.reveal"), onClick: () => void desktop.reveal(result.directory) }],
+          })
+        },
+      }),
+    )
 
   ctx.add(Slot, {
     at: "window.bottom",

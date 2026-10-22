@@ -134,6 +134,22 @@ The command waits until the snapshot is complete, then prints its path:
   contain prompts, file contents, and credentials. Do not share it publicly.
 </Callout>
 
+### In the desktop app
+
+Run **Capture heap snapshots** from the command palette. It writes one folder in your Downloads folder with a snapshot of
+each part of the app, captured at the same moment:
+
+```text
+opencode-heap-2026-10-23T013012345Z/
+  server-48213.heapsnapshot    the server the window uses
+  window-1-48390.heapsnapshot  one per app window
+  main-48102.heapsnapshot      the desktop main process
+  manifest.json                processes, PIDs, and per-process memory; written last
+```
+
+- A server on another machine keeps its snapshot there. `manifest.json` records its path.
+- Browser tabs are not included, because their snapshots contain the content of the pages you visited.
+
 ## Capture CPU and memory profiles
 
 On macOS and Linux, you can signal a running OpenCode process to capture diagnostic data. Get the background server PID
