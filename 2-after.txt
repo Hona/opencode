@@ -1,5 +1,7 @@
   [90mopen[0m[1mcode[0m
 
+  [90mRun [0m[1mopencode[0m[90m to use [0m[1m2.0.0[0m
+
   [90mSession   [0m[1mPanel fixture[0m
   [90mContinue  [0m[1mopencode -s ses_panel_83c0d243-214a-4ff6-adf1-368a5810e529[0m
 
