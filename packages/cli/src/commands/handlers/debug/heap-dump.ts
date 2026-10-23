@@ -30,8 +30,11 @@ const handler = Effect.fn("cli.debug.heap-dump")(function* (
         ? new Error(`The server at ${endpoint.url} does not support heap dumps. Update and restart it first.`)
         : cause,
   })
-  // Servers released before `directory` existed ignore it and write into their log directory.
-  if (directory !== undefined && path.dirname(snapshot.path) !== path.normalize(directory))
+  // Servers released before `directory` existed ignore it and write into their log directory. The server joins the
+  // directory and file name, so join the same way, with the path style of the server's machine: that tolerates a
+  // trailing separator and keeps a POSIX path from a remote server intact on Windows.
+  const style = /^([A-Za-z]:|\\\\)/.test(snapshot.path) ? path.win32 : path.posix
+  if (directory !== undefined && style.join(directory, style.basename(snapshot.path)) !== snapshot.path)
     process.stderr.write(`The server ignored --directory. Update and restart it to choose where snapshots go.${EOL}`)
   process.stdout.write(snapshot.path + EOL)
 })

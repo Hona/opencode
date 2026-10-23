@@ -34,7 +34,8 @@ export async function captureServer(
     .debug.heapDump({ directory }, { signal })
     .then(
       (snapshot): ServerSnapshot =>
-        path.dirname(snapshot.path) === path.normalize(directory)
+        // The server joins the directory and file name, so the same join recognizes a snapshot it wrote there.
+        path.join(directory, path.basename(snapshot.path)) === snapshot.path
           ? { process: "server", pid: snapshot.pid, file: path.basename(snapshot.path) }
           : { process: "server", pid: snapshot.pid, path: snapshot.path },
       (error: Error): ServerSnapshot => ({
