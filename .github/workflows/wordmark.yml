@@ -1,0 +1,17 @@
+name: wordmark repro
+on: push
+jobs:
+  print:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print variants
+        shell: bash
+        run: |
+          for file in *.txt; do
+            echo "=== $file"
+            cat "$file"
+          done
