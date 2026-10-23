@@ -6021,7 +6021,11 @@ export type VcsDiffOutput = { location: LocationPublicRef; data: Array<FileDiffI
 
 export type DebugHeapDumpInput = { readonly directory?: { readonly directory?: string | undefined }["directory"] }
 
-export type DebugHeapDumpOutput = { path: string; pid: number }
+export type DebugHeapDumpOutput = {
+  path: string
+  pid: number
+  memory: { rss: number; heapTotal: number; heapUsed: number; external: number; arrayBuffers: number }
+}
 
 export type DebugLocationListOutput = Array<LocationPublicRef>
 
