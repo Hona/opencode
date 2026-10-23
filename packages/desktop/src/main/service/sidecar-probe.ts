@@ -15,12 +15,13 @@ let probe: Promise<Endpoint | undefined> | undefined
 
 export function startSidecarProbe() {
   if (!app.isPackaged) return
-  const version = CHANNEL === "beta" ? releasedBuild : bundledVersion()
+  const bundled = bundledVersion()
+  const version = CHANNEL === "beta" ? releasedBuild : bundled
 
   if (version === "") return
 
   const file = serviceFile({
-    channel: CHANNEL,
+    version: bundled,
     stateHome: process.env.XDG_STATE_HOME ?? path.join(homedir(), ".local", "state"),
   })
 

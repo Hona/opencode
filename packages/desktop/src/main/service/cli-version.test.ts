@@ -49,12 +49,13 @@ describe("cli-version", () => {
     expect(releasedBuild(input.running)).toBe(input.expected)
   })
 
+  // The file follows the CLI, not the app: a source build of the desktop runs whichever CLI it downloaded or built.
   test.each([
-    { channel: "dev" as const, server: undefined, expected: path.join("/state", "opencode", "service-dev.json") },
-    { channel: "dev" as const, server: "local", expected: path.join("/state", "opencode", "service-local.json") },
-    { channel: "beta" as const, server: undefined, expected: undefined },
-    { channel: "prod" as const, server: undefined, expected: undefined },
-  ])("serviceFile($channel, server=$server)", (input) => {
+    { version: "0.0.0-dev-9", server: undefined, expected: path.join("/state", "opencode", "service-dev.json") },
+    { version: "2.0.32", server: undefined, expected: undefined },
+    { version: "0.0.0-beta-2", server: undefined, expected: undefined },
+    { version: "local", server: "local", expected: path.join("/state", "opencode", "service-local.json") },
+  ])("serviceFile($version, server=$server)", (input) => {
     expect(serviceFile({ ...input, stateHome: "/state" })).toBe(input.expected)
   })
 

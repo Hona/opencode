@@ -47,7 +47,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
   const file = serviceFile({
-    channel: CHANNEL,
+    version: cli.version,
     server: process.env.OPENCODE_DESKTOP_SERVER_CHANNEL,
     stateHome: process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
   })

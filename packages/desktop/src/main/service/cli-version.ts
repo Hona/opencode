@@ -30,17 +30,20 @@ export function releasedBuild(version: string) {
 }
 
 /**
- * The registration file the channel's CLI writes, or undefined for the shared `service.json` of the released
- * channels. Matches the CLI's `ServiceConfig.filename`.
+ * The registration file the CLI writes, or undefined for the shared `service.json` of the released channels. Follows
+ * the CLI itself rather than the app's channel, because a source build can run any CLI: a dev build writes
+ * `service-dev.json`, a released one `service.json`. Matches the CLI's `ServiceConfig.filename`.
  */
 export function serviceFile(input: {
-  readonly channel: "local" | "dev" | "beta" | "prod"
+  /** The CLI's version. */
+  readonly version: string
+  /** `OPENCODE_DESKTOP_SERVER_CHANNEL`: `local` for a CLI built from this checkout. */
   readonly server?: string
   readonly stateHome: string
 }) {
   if (input.server === "local") return path.join(input.stateHome, "opencode", "service-local.json")
 
-  if (input.channel === "dev") return path.join(input.stateHome, "opencode", "service-dev.json")
+  if (!releasedBuild(input.version)) return path.join(input.stateHome, "opencode", "service-dev.json")
 
   return undefined
 }
