@@ -91,12 +91,23 @@ export function summarize(json: string): ProcessMemory[] {
   )
 
   // Each periodic dump shares an id across processes, and a process reports its totals and its allocators in separate
-  // events (the browser in two). The latest dump with allocators is the latest complete picture.
+  // events (the browser in two). Stopping the recording can cut into the last dump, so use the latest one every
+  // process reported both for, else the latest with any allocators.
   const dumps = events.flatMap((event) =>
     event.ph === "v" && event.args?.dumps ? [{ ...event, dumps: event.args.dumps }] : [],
   )
 
-  const latest = dumps.findLast((event) => event.dumps.allocators)?.id
+  const pids = [...new Set(dumps.map((event) => event.pid))]
+
+  const complete = [...new Set(dumps.map((event) => event.id))].findLast((id) =>
+    pids.every((pid) => {
+      const own = dumps.filter((event) => event.id === id && event.pid === pid)
+
+      return own.some((event) => event.dumps.allocators) && own.some((event) => event.dumps.process_totals)
+    }),
+  )
+
+  const latest = complete ?? dumps.findLast((event) => event.dumps.allocators)?.id
   const current = dumps.filter((event) => event.id === latest)
 
   return [...new Set(current.map((event) => event.pid))]

@@ -40,6 +40,10 @@ const trace = {
     { pid: 20, ph: "v", id: "0x1", args: { dumps: { process_totals: { private_footprint_bytes: hex(200) } } } },
     { pid: 20, ph: "v", id: "0x1", args: { dumps: { allocators: { malloc: { attrs: { size: size(50) } } } } } },
     { pid: 20, ph: "v", id: "0x1", args: { dumps: { allocators: { v8: { attrs: { size: size(30) } } } } } },
+    // The recording stopped while the next dump was arriving: only the renderer reported, so 0x1 stays the answer.
+    { pid: 10, ph: "v", id: "0x2", args: { dumps: { process_totals: { private_footprint_bytes: hex(950) } } } },
+    { pid: 10, ph: "v", id: "0x2", args: { dumps: { allocators: { malloc: { attrs: { size: size(950) } } } } } },
+    { pid: 20, ph: "v", id: "0x2", args: { dumps: { process_totals: { private_footprint_bytes: hex(210) } } } },
   ],
 }
 
@@ -61,6 +65,22 @@ test("summarizes each process's latest complete dump, largest first", () => {
       allocators: { malloc: 50, v8: 30 },
       detail: {},
     },
+  ])
+})
+
+test("falls back to the latest dump with allocators when no dump reached every process", () => {
+  const partial = {
+    traceEvents: [
+      { pid: 10, ph: "v", id: "0x0", args: { dumps: { allocators: { malloc: { attrs: { size: size(10) } } } } } },
+      { pid: 20, ph: "v", id: "0x0", args: { dumps: { process_totals: { private_footprint_bytes: hex(20) } } } },
+    ],
+  }
+
+  expect(
+    summarize(JSON.stringify(partial)).map((item) => [item.pid, item.totals.privateFootprint, item.allocators]),
+  ).toEqual([
+    [20, 20, {}],
+    [10, undefined, { malloc: 10 }],
   ])
 })
 

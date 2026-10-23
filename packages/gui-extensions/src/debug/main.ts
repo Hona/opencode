@@ -169,10 +169,13 @@ async function recordNative(directory: string) {
 async function describeWindow(window: BrowserWindow) {
   const contents = window.webContents
 
-  const page = await contents
-    .executeJavaScript(pageStatsScript)
-    .then(decodePageStats)
-    .catch((error: Error) => ({ error: error.message }))
+  // A hung or busy renderer never answers, and the snapshots wait for this step, so give up after a few seconds.
+  const page = await Promise.race([
+    contents.executeJavaScript(pageStatsScript).then(decodePageStats),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("The window did not answer within 3 seconds.")), 3_000),
+    ),
+  ]).catch((error: Error) => ({ error: error.message }))
 
   return {
     window: window.id,
