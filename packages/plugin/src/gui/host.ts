@@ -554,9 +554,7 @@ export interface Bridge {
       readonly id: string
       /** Its base URL. */
       readonly url: string
-      /** The HTTP basic user name. */
-      readonly username?: string
-      /** The HTTP basic password. */
+      /** The HTTP basic password; the user name is always `opencode`. */
       readonly password?: string
     }[],
   ): void

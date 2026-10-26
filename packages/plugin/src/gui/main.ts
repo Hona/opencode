@@ -121,9 +121,7 @@ export interface ServerEndpoint {
    * as one in WSL or on another local port, report false.
    */
   readonly sameMachine: boolean
-  /** Credentials a window configured for the server; `headers` already carries them. None for the app's own server. */
-  readonly username?: string
-  /** The configured password; `headers` already carries it. */
+  /** The password a window configured for the server; `headers` already carries it. None for the app's own server. */
   readonly password?: string
 }
 

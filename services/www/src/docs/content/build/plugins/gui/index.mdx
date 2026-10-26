@@ -1261,7 +1261,7 @@ interface ServerEntry {
   label?: string
   state: "stopped" | "starting" | "auth" | "ready" | "failed" | "incompatible"
   listed?: boolean
-  http?: { url: string; username?: string; password?: string }
+  http?: { url: string; password?: string }
   reconnect?(signal: AbortSignal): Promise<{ url: string; password?: string }>
   connect?(): Promise<boolean>
   remove?(): Promise<void>
@@ -2292,7 +2292,6 @@ interface ServerEndpoint {
   url: string
   headers: Record<string, string>
   sameMachine: boolean
-  username?: string
   password?: string
 }
 ```

@@ -308,7 +308,7 @@ export function createHost(input: {
     if (!endpoint) return undefined
 
     const authorization = endpoint.password
-      ? `Basic ${Buffer.from(`${endpoint.username ?? "opencode"}:${endpoint.password}`).toString("base64")}`
+      ? `Basic ${Buffer.from(`opencode:${endpoint.password}`).toString("base64")}`
       : SidecarCredentials.authorization(sidecar, endpoint.url)
 
     return {
@@ -316,7 +316,6 @@ export function createHost(input: {
       url: endpoint.url,
       headers: authorization ? { authorization } : {},
       sameMachine: !!sidecar && URL.canParse(endpoint.url) && new URL(endpoint.url).origin === sidecar.url,
-      username: endpoint.username,
       password: endpoint.password,
     }
   }

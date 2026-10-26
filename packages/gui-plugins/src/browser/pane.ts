@@ -67,7 +67,6 @@ export function createBrowserPane(input: {
 
       if (disposed || !server || !destinationOrigin(server.url)) throw new Error("browser.pane.registration.invalid")
 
-      if (server.username && !server.password) throw new Error("browser.pane.endpoint.invalid")
       const win = input.windows.get(window)
 
       if (!win || entries.has(binding)) throw new Error("browser.pane.owner.invalid")

@@ -52,7 +52,6 @@ export const PluginLayout = Schema.Struct({
 export const PluginEndpoint = Schema.Struct({
   id: text(16_384),
   url: text(16_384),
-  username: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(1_024))),
   password: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(4_096))),
 })
 
