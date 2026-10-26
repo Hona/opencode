@@ -1113,3 +1113,91 @@ story("startup enable state does not wait for the manager, and live updates beat
     listeners: 0,
   })
 })
+
+story("composer pills show per session, open their rows, and fail only their own plugin", async ({ page }) => {
+  const statuses = await page.evaluate(async (fixture) => {
+    const { mountComposerPills, until, ComposerPill } = await import(fixture)
+
+    const host = mountComposerPills({
+      definitions: [
+        {
+          id: "acme",
+          windowEntry: async () => ({
+            default: (ctx: Context) =>
+              void ctx.add(ComposerPill, {
+                id: "pulls",
+                show: (input: { readonly session: { readonly directory: string } }) => ({
+                  icon: "github",
+                  label: "2 pull requests",
+                  tone: "danger",
+                  title: "Pull requests",
+                  rows: [
+                    {
+                      id: "12",
+                      label: "#12 Fix the tree",
+                      icon: "circle-x",
+                      tone: "danger",
+                      detail: input.session.directory,
+                      run: () => void (document.body.dataset.picked = "12"),
+                    },
+                    { id: "13", label: "#13 Draft", icon: "branch" },
+                  ],
+                }),
+              }),
+          }),
+        },
+        // A pill with nothing to show for this session renders nothing.
+        {
+          id: "quiet",
+          windowEntry: async () => ({
+            default: (ctx: Context) => void ctx.add(ComposerPill, { id: "none", show: () => undefined }),
+          }),
+        },
+        {
+          id: "broken",
+          windowEntry: async () => ({
+            default: (ctx: Context) =>
+              void ctx.add(ComposerPill, {
+                id: "boom",
+                show: () => {
+                  throw new Error("pill failed")
+                },
+              }),
+          }),
+        },
+      ],
+    })
+
+    await until(() => !!host.failure("broken") && host.status("acme") === "active")
+
+    return {
+      acme: host.status("acme"),
+      quiet: host.status("quiet"),
+      broken: host.failure("broken"),
+    }
+  }, fixture)
+
+  expect(statuses).toEqual({
+    acme: "active",
+    quiet: "active",
+    broken: { phase: "render", error: expect.stringContaining("pill failed") },
+  })
+
+  const pills = page.getByTestId("composer-pills").locator('[data-slot="session-plugin-pill"]')
+  await expect(pills).toHaveCount(1)
+  await expect(pills).toHaveText("2 pull requests")
+  await expect(pills).toHaveAttribute("aria-label", "Pull requests")
+  await expect(pills.locator("svg").first()).toHaveClass(/text-v2-state-fg-danger/)
+
+  await pills.click()
+  const menu = page.locator('[data-slot="session-plugin-pill-menu"]')
+  await expect(menu.getByText("Pull requests")).toBeVisible()
+  const rows = menu.locator('[data-slot="session-plugin-pill-row"]')
+  await expect(rows).toHaveCount(2)
+  await expect(rows.nth(0)).toContainText("/repo")
+  // A row without `run` only shows.
+  await expect(rows.nth(1)).toHaveAttribute("data-disabled", "")
+
+  await rows.nth(0).click()
+  await expect(page.locator("body")).toHaveAttribute("data-picked", "12")
+})

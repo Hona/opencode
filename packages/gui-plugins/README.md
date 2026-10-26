@@ -214,18 +214,19 @@ SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the
 
 ### Registries
 
-| Registry                                          | Process | What an item is                                                                             |
-| ------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------- |
-| [`Command`](../plugin/src/gui/registries.ts)      | window  | A palette command with an optional keybind and slash command                                |
-| [`MenuItem`](../plugin/src/gui/registries.ts)     | window  | An item of a host menu: the side panel + menu, Add server, a server row                     |
-| [`Panel`](../plugin/src/gui/registries.ts)        | window  | Tabs in the session's side region                                                           |
-| [`SettingsPage`](../plugin/src/gui/registries.ts) | window  | A settings page, a section on a host page, or rows in a host section                        |
-| [`Server`](../plugin/src/gui/registries.ts)       | window  | A source of servers, such as SSH hosts                                                      |
-| [`LinkHandler`](../plugin/src/gui/registries.ts)  | window  | Opens local links, such as file paths in messages, and says whether their target exists     |
-| [`TitlebarItem`](../plugin/src/gui/registries.ts) | window  | A pill in the titlebar or the tabs footer                                                   |
+| Registry                                          | Process | What an item is                                                                                                           |
+| ------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| [`Command`](../plugin/src/gui/registries.ts)      | window  | A palette command with an optional keybind and slash command                                                              |
+| [`MenuItem`](../plugin/src/gui/registries.ts)     | window  | An item of a host menu: the side panel + menu, Add server, a server row                                                   |
+| [`Panel`](../plugin/src/gui/registries.ts)        | window  | Tabs in the session's side region                                                                                         |
+| [`SettingsPage`](../plugin/src/gui/registries.ts) | window  | A settings page, a section on a host page, or rows in a host section                                                      |
+| [`Server`](../plugin/src/gui/registries.ts)       | window  | A source of servers, such as SSH hosts                                                                                    |
+| [`LinkHandler`](../plugin/src/gui/registries.ts)  | window  | Opens local links, such as file paths in messages, and says whether their target exists                                   |
+| [`TitlebarItem`](../plugin/src/gui/registries.ts) | window  | A pill in the titlebar or the tabs footer                                                                                 |
+| [`ComposerPill`](../plugin/src/gui/registries.ts) | window  | A pill in the row above a session's composer, optionally opening a menu of rows                                           |
 | [`Slot`](../plugin/src/gui/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.location.workspace`, `session.location.menu`, `session.panel.end` |
-| [`Style`](../plugin/src/gui/registries.ts)        | window  | CSS imported with `?inline`                                                                 |
-| [`MenubarItem`](../plugin/src/gui/main.ts)        | main    | An item of the native app menu                                                              |
+| [`Style`](../plugin/src/gui/registries.ts)        | window  | CSS imported with `?inline`                                                                                               |
+| [`MenubarItem`](../plugin/src/gui/main.ts)        | main    | An item of the native app menu                                                                                            |
 
 `session.location.menu` contributes items after the project menu's location details. It receives the owning `screen`,
 the live `session`, and `shown`; keep data subscriptions active only while `shown` is true. Loading headers without an
@@ -237,33 +238,33 @@ to the displayed repository or worktree instead of adding a second menu item.
 
 ### Host APIs
 
-| Property                     | Type ([window](../plugin/src/gui/host-apis.ts), [main](../plugin/src/gui/main.ts)) | What it does                                                      |
-| ---------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `ctx.layout`                 | `Layout`                                                                           | Side panel tabs, scroll offsets, settings, open project           |
-| `ctx.sessions`               | `Sessions`                                                                         | Sessions of open tabs, and the mounted `MountedSession`           |
-| `ctx.screen`                 | `Screen`                                                                           | The session screen's files, comments and composer                 |
-| `ctx.storage`                | `Storage`                                                                          | Stores for keys known only at runtime, and window memory          |
-| `ctx.system`                 | `System`                                                                           | Clipboard, saving files, `openExternal`                           |
-| `ctx.desktop`                | `Desktop \| undefined`                                                             | Desktop-only: reveal, launch, installed, zoom                     |
-| `ctx.dialogs`                | `Dialogs`                                                                          | `open` returns a handle to close; a dialog closes with its owner  |
-| `ctx.links`                  | `Links`                                                                            | Opens a local link, or checks it exists, with the best handler    |
-| `ctx.embeds`                 | `Embeds`                                                                           | Shows a web page the main entry created                           |
-| `ctx.app`                    | `App`                                                                              | Version, channel, platform, packaged                              |
-| `ctx.locale`                 | `Locale`                                                                           | Locale and writing direction                                      |
-| `ctx.appearance`             | `Appearance`                                                                       | The user's mono font                                              |
-| `ctx.router`                 | `Router`                                                                           | The route path, and whether it is changing                        |
-| `ctx.keybinds`               | `Keybinds`                                                                         | Display and matching of command keybinds                          |
-| `ctx.servers`                | `Servers`                                                                          | The servers the app lists, and each one's live `ServerRef`        |
-| `ctx.workspaces`             | `Workspaces`                                                                       | `on("remove", …)` when a workspace is removed                     |
-| `ctx.signal` (main)          | `AbortSignal`                                                                      | Aborts when the instance goes away                                |
-| `ctx.onCleanup` (main)       | `(fn) => void`                                                                     | Runs `fn` when the instance goes away                             |
-| `ctx.storage` (main)         | `Storage`                                                                          | Synchronous storage, the same `Persisted` shape                   |
-| `ctx.log` (main)             | `Log`                                                                              | The desktop log file                                              |
-| `ctx.app` (main)             | `App`                                                                              | The same shape; `platform` is `"desktop"`                         |
-| `ctx.serverEndpoints` (main) | `ServerEndpoints`                                                                  | URL and credentials of a server the windows use                   |
-| `ctx.windows` (main)         | `Windows`                                                                          | The app's main windows                                            |
-| `ctx.embeds` (main)          | `Embeds`                                                                           | `create(view, window)` places a web page                          |
-| `ctx.cli` (main)             | `Cli`                                                                              | The opencode CLI the app runs                                     |
+| Property                     | Type ([window](../plugin/src/gui/host-apis.ts), [main](../plugin/src/gui/main.ts)) | What it does                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `ctx.layout`                 | `Layout`                                                                           | Side panel tabs, scroll offsets, settings, open project          |
+| `ctx.sessions`               | `Sessions`                                                                         | Sessions of open tabs, and the mounted `MountedSession`          |
+| `ctx.screen`                 | `Screen`                                                                           | The session screen's files, comments and composer                |
+| `ctx.storage`                | `Storage`                                                                          | Stores for keys known only at runtime, and window memory         |
+| `ctx.system`                 | `System`                                                                           | Clipboard, saving files, `openExternal`                          |
+| `ctx.desktop`                | `Desktop \| undefined`                                                             | Desktop-only: reveal, launch, installed, zoom                    |
+| `ctx.dialogs`                | `Dialogs`                                                                          | `open` returns a handle to close; a dialog closes with its owner |
+| `ctx.links`                  | `Links`                                                                            | Opens a local link, or checks it exists, with the best handler   |
+| `ctx.embeds`                 | `Embeds`                                                                           | Shows a web page the main entry created                          |
+| `ctx.app`                    | `App`                                                                              | Version, channel, platform, packaged                             |
+| `ctx.locale`                 | `Locale`                                                                           | Locale and writing direction                                     |
+| `ctx.appearance`             | `Appearance`                                                                       | The user's mono font                                             |
+| `ctx.router`                 | `Router`                                                                           | The route path, and whether it is changing                       |
+| `ctx.keybinds`               | `Keybinds`                                                                         | Display and matching of command keybinds                         |
+| `ctx.servers`                | `Servers`                                                                          | The servers the app lists, and each one's live `ServerRef`       |
+| `ctx.workspaces`             | `Workspaces`                                                                       | `on("remove", …)` when a workspace is removed                    |
+| `ctx.signal` (main)          | `AbortSignal`                                                                      | Aborts when the instance goes away                               |
+| `ctx.onCleanup` (main)       | `(fn) => void`                                                                     | Runs `fn` when the instance goes away                            |
+| `ctx.storage` (main)         | `Storage`                                                                          | Synchronous storage, the same `Persisted` shape                  |
+| `ctx.log` (main)             | `Log`                                                                              | The desktop log file                                             |
+| `ctx.app` (main)             | `App`                                                                              | The same shape; `platform` is `"desktop"`                        |
+| `ctx.serverEndpoints` (main) | `ServerEndpoints`                                                                  | URL and credentials of a server the windows use                  |
+| `ctx.windows` (main)         | `Windows`                                                                          | The app's main windows                                           |
+| `ctx.embeds` (main)          | `Embeds`                                                                           | `create(view, window)` places a web page                         |
+| `ctx.cli` (main)             | `Cli`                                                                              | The opencode CLI the app runs                                    |
 
 ### Built-in only
 

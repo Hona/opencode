@@ -420,6 +420,8 @@ function SessionScreenContent(props: {
           {(model) => (
             <ActiveSessionComposerRegion
               session={session}
+              view={props.view}
+              screen={props.screen}
               model={model}
               suggestionBoundary={timeline.visible}
               onReveal={timeline.actions.revealPart}

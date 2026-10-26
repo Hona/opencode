@@ -45,8 +45,19 @@ import { PluginSlot } from "../src/runtime/plugin/render"
 import { persistedHandle } from "../src/runtime/plugin/stores"
 import { LanguageProvider } from "../src/runtime/i18n/language"
 import { PluginsSettings } from "../src/runtime/plugin/settings-plugins"
+import { SessionPluginPills } from "../src/session/composer/plugin-pills"
 
-export { bindPlugin, usePlugin, Contract, createKeyed, Ipc, Panel, Slot, Store } from "@opencode/plugin/gui"
+export {
+  bindPlugin,
+  usePlugin,
+  ComposerPill,
+  Contract,
+  createKeyed,
+  Ipc,
+  Panel,
+  Slot,
+  Store,
+} from "@opencode/plugin/gui"
 
 export { Schema }
 
@@ -525,6 +536,65 @@ export function mountSessionRegion(input: {
     /** The session each composer attachment reached, in order. */
     attached,
     status: (id: string) => hosts[0]?.state.status[id],
+    unmount: () => {
+      dispose()
+      container.remove()
+    },
+  }
+}
+
+/**
+ * Mounts the real host and the composer lane's plugin pills for one session, as the composer region renders them
+ * (right-aligned). The session's directory is `/repo`.
+ */
+export function mountComposerPills(input: { definitions: readonly Entry[] }) {
+  const container = document.createElement("div")
+  container.dataset.testid = "composer-pills"
+  container.style.position = "relative"
+  container.style.marginTop = "240px"
+  document.body.appendChild(container)
+  const hosts: PluginHost[] = []
+  const captured: Captured = {}
+
+  const value = { key: "fixture\na", id: "a", directory: "/repo", visit: {} }
+
+  // SAFETY: the pill renderer passes the session through; the test's plugins read only `directory`.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const session = value as unknown as MountedSession
+
+  // SAFETY: as above; the test's plugins never read the screen.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const screen = {} as unknown as SessionScreen
+
+  function Pills() {
+    const host = usePluginHost()
+    hosts.push(host)
+
+    return (
+      <Show when={host.ready()}>
+        <SessionPluginPills session={session} screen={screen} alignment={() => "end"} />
+      </Show>
+    )
+  }
+
+  const dispose = render(
+    () => (
+      <LanguageProvider locale="en">
+        <PlatformProvider value={web}>
+          <DialogProvider>
+            <RealHost definitions={input.definitions} captured={captured}>
+              <Pills />
+            </RealHost>
+          </DialogProvider>
+        </PlatformProvider>
+      </LanguageProvider>
+    ),
+    container,
+  )
+
+  return {
+    status: (id: string) => hosts[0]?.state.status[id],
+    failure: (id: string) => hosts[0]?.state.failures[id],
     unmount: () => {
       dispose()
       container.remove()
