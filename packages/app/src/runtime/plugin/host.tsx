@@ -555,13 +555,14 @@ function createHost(input: HostInput) {
       const unavailable = (reason: string) => new Error(`Ipc "${token.id}" is unavailable: ${reason}`)
 
       const ready = (): Promise<IpcClient<IpcSpec>> => {
+        // A client kept past the plugin's instance never reaches main again, even while main still provides.
+        if (controller.signal.aborted) return Promise.reject(unavailable("the plugin went away"))
+
         const current = untrack(read)
 
         if (current.status === "active") return Promise.resolve(current.value)
 
         if (current.status === "inactive") return Promise.reject(unavailable(current.reason))
-
-        if (controller.signal.aborted) return Promise.reject(unavailable("the plugin went away"))
 
         return new Promise((resolve, reject) =>
           runWithOwner(owner, () =>
