@@ -55,7 +55,7 @@ describe("database", () => {
     ]
 
     expect(db.all(sql`SELECT id, enabled, manifest, revision FROM plugin ORDER BY id`)).toEqual(saved)
-    // 2.0.24 to 2.0.28 read the table by its old name; a downgraded app still finds the same rows there.
+    // Releases from 2.0.24 until the rename read the table by its old name; a downgraded app still finds the same rows there.
     expect(db.all(sql`SELECT id, enabled, manifest, revision FROM extension ORDER BY id`)).toEqual(saved)
     native.close()
   })

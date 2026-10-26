@@ -260,7 +260,7 @@ export interface MainContext extends BaseContext {
    *
    * @example
    * ```ts
-   * const provider = ctx.provide(Updater, { state: () => updater.state(), check, install })
+   * const provider = ctx.provide(Downloads, { state: () => downloads.state(), start, cancel })
    * ```
    */
   provide<S extends IpcSpec>(token: Ipc<S>, impl: IpcImpl<S>): IpcProvider<S>

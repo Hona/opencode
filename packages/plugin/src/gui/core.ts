@@ -292,7 +292,7 @@ export type IpcImpl<S extends IpcSpec> = {
  *
  * @example
  * ```ts
- * const provider = ctx.provide(Updater, { state: () => updater.state(), check, install })
+ * const provider = ctx.provide(Downloads, { state: () => downloads.state(), start, cancel })
  * provider.changed()
  * ```
  */
