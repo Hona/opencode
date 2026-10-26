@@ -117,7 +117,12 @@ story.beforeEach(async ({ mount, page }) => {
         const pluginHost = host.usePluginHost()
         // What the side strip's + shows beside the browser item, through the host's own formatter.
         props.shortcut(() => {
-          const item = pluginHost.list(sdk.MenuItem).find((value: MenuItem) => value.menu === "session.panel")
+          const item = pluginHost
+            .items(sdk.MenuItem)
+            .find(
+              (entry: { plugin: string; value: MenuItem }) =>
+                entry.plugin === "browser" && entry.value.menu === "session.panel",
+            )?.value
 
           return item?.menu === "session.panel" && item.keybind ? command.keybind(item.keybind) : ""
         })
