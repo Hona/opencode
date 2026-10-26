@@ -40,7 +40,7 @@ Sibling skills: `tui-tests` (OpenTUI renderer tests in tui and cli), `app-e2e-te
 - **Product Effect code must stay on the caller's clock**, which is what makes both patterns above possible. Read time through `Clock`, wait with `Effect.sleep` or `Schedule`, and run nested effects with the caller's context.
   - A bare `Effect.runPromise` runs on the default real clock. McpStdio does this (`packages/core/src/mcp/stdio.ts:66`, `:82`, `:109`), so `packages/core/test/mcp.test.ts:832` waits the real 2s `CLOSE_GRACE` on every OS.
   - Capture `yield* Effect.context()` and use `Effect.runPromiseWith(context)`, as `packages/cli/src/acp/agent.ts:27` does.
-- **Code outside Effect** (app, desktop, ui, session-ui): `jest.useFakeTimers()` and `setSystemTime` from `bun:test`, restored in `afterEach` (`packages/desktop/src/main/extension/lifecycle.test.ts:27-32`, `packages/desktop/src/main/storage/drafts.test.ts:15-17`).
+- **Code outside Effect** (app, desktop, ui, session-ui): `jest.useFakeTimers()` and `setSystemTime` from `bun:test`, restored in `afterEach` (`packages/desktop/src/main/plugin/lifecycle.test.ts:27-32`, `packages/desktop/src/main/storage/drafts.test.ts:15-17`).
 - **Advance fake timers to the next timer** (`jest.advanceTimersToNextTimer()`, `jest.runOnlyPendingTimers()`), not in small fixed steps. The 10ms-step `advance` at `lifecycle.test.ts:37` turns the 1,000-seed fuzz test (`:607`) into about 430k event-loop turns: 2.8-3.8s on Windows, 0.56s on Linux.
 
 ## Real-time waits: deadlines, not attempt counts
@@ -109,7 +109,7 @@ To avoid adding more:
 - Never add `--isolate` or bare `--parallel` (which implies `--isolate`) to a test script: ai went from 7.6s to 26.3s with `--parallel=2`.
   - `--parallel=N --no-isolate` keeps the shared registry and measured 0.47-0.68x serial wall time at about the same CPU in core. It also exposed load-sensitive tests (browser-idle and integration's `eventually`, both since fixed).
   - Adopting it is a runner decision for maintainers once CI passes on both OSes, not a fix for one slow test.
-- Runtime imports run in every file that loads the module. `packages/desktop/src/main/storage/store.ts:3` imports `electron` only for `getStore`, so `src/main/extension/storage.test.ts` and `src/main/storage/store.test.ts` download the ~100MB Electron binary on a fresh install. On a first local run, storage.test.ts took 5.3s of file time for 0.1s of test bodies. Use `import type` for types (`packages/desktop/src/main/ipc-transport.test.ts:4`).
+- Runtime imports run in every file that loads the module. `packages/desktop/src/main/storage/store.ts:3` imports `electron` only for `getStore`, so `src/main/plugin/storage.test.ts` and `src/main/storage/store.test.ts` download the ~100MB Electron binary on a fresh install. On a first local run, storage.test.ts took 5.3s of file time for 0.1s of test bodies. Use `import type` for types (`packages/desktop/src/main/ipc-transport.test.ts:4`).
 
 ## Turbo test tasks
 

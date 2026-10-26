@@ -315,7 +315,10 @@ export interface IpcProvider<S extends IpcSpec> {
     data: TypeOf<NonNullable<S["events"]>[Name]>,
     window?: number,
   ): void
-  /** Withdraws the Ipc before the instance goes away; windows see it inactive. The host also withdraws it then. */
+  /**
+   * Withdraws the Ipc before the instance goes away. Windows see it `pending`, and calls wait, until it is provided again
+   * or the instance goes away. The host also withdraws it then.
+   */
   dispose(): void
 }
 

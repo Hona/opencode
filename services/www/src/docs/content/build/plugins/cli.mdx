@@ -653,7 +653,7 @@ Expose the TUI plugin through `./tui`; add OpenTUI peers when the plugin renders
 }
 ```
 
-Export `./tui` beside the [server part](/build/plugins/server) for automatic loading.
+Export `./tui` beside a [server part](/build/plugins/server) or [GUI part](/build/plugins/gui) for automatic loading.
 
 ```ts title="src/index.ts"
 import { Plugin } from "@opencode/plugin"
@@ -664,7 +664,7 @@ export default Plugin.define({
 })
 ```
 
-Configure a CLI-only package in [`cli.json`](/cli/plugins) so it remains active against remote servers.
+Configure a TUI-only package in [`cli.json`](/cli/plugins) so it remains active against remote servers.
 
 ```json title="cli.json"
 {

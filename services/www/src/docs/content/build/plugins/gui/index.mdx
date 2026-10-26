@@ -74,7 +74,7 @@ Users install it like any other plugin; there is no separate GUI install step.
 ```
 
 The GUI declares no id: it takes the plugin's, the server part's `id` or, for a package without a server part, the
-package name. Read it as `ctx.id`.
+package name (a local directory without a `name` uses the directory name). Read it as `ctx.id`.
 
 ### One file, two processes
 
@@ -203,6 +203,8 @@ every window.
 The desktop app's main process lists the plugins and reads their bundles from its own server, with a credential that
 only it holds, and sends windows the same set. A window cannot supply main-process code.
 
+A plugin whose server part fails to load has no GUI.
+
 ## Reload and updates
 
 Load the plugin from its local directory and rebuild on every change:
@@ -212,7 +214,8 @@ vite build --watch
 ```
 
 - A local directory whose `package.json` has a `name` and `exports` resolves `./gui-experimental` through them. Without
-  them, it loads `gui-experimental.cjs` (or `.js`) at its root.
+  them, it loads `gui-experimental.cjs` (or `.js`) at its root. The entry must be `.cjs` or `.js`; any other file is
+  ignored.
 - Each rebuild reloads the plugin's GUI in every window and in the main process. The server entry does not restart.
 - An installed package's GUI changes only with its version.
 - Changing the plugin's `options` in `opencode.json(c)` reloads the plugin.
@@ -248,14 +251,14 @@ export const definition = Plugin.define({
 ```
 
 - The host gives the plugin its id, `ctx.id`: the server part's `id`, or the package name for a package without a
-  server part. It prefixes every id the plugin creates: commands (`<id>.<command>`), panel keys (`<id>:<tab>`), stored
+  server part (the directory name for a local directory without a `name`). It prefixes every id the plugin creates: commands (`<id>.<command>`), panel keys (`<id>:<tab>`), stored
   keys (`plugin.<id>.<key>`), and the ids of the [contracts and Ipcs](#contracts-and-tokens) it provides.
 - `os` limits the plugin to some operating systems. Omit it to run everywhere, the web included. A plugin whose `os`
   leaves out this system does not run, and **Settings > Plugins** keeps its row with "Not available on this system." A
   plugin that lists any OS does not run on the web.
 - `stores` declares [stored state](#stored-state) for windows. Read it as `ctx.stores.<key>`.
 - `i18n` holds copy by locale. Write every locale inline; English fills every key a locale lacks. Read it with
-  `ctx.t(key, params)` and `ctx.plural(key, count)`. `ctx.t` also reads the app's shared keys, such as `common.*`.
+  `ctx.t(key, params)` and `ctx.plural(key, count)`. In a window, `ctx.t` also reads the app's shared keys, such as `common.*`. In `main`, a missing key returns the key.
 - Define `setup`, `main`, or both. A GUI without either fails to load.
 - Without setups, `Plugin.define` returns the declarations as a `Plugin.Declarations`, so setups in other files can be
   typed from them. `Plugin.Definition` is the type of the full definition.
@@ -272,7 +275,7 @@ interface Declarations {
 }
 
 interface Definition extends Declarations {
-  setup?(ctx: Context): Cleanup | void
+  setup?(ctx: SetupContext<this>): Cleanup | void
   main?(ctx: MainContext): Cleanup | void | Promise<Cleanup | void>
 }
 
@@ -1320,13 +1323,16 @@ The sections below cover each API. `ctx.options`, `ctx.client`, and `ctx.app` ar
 #### Reference
 
 ```ts
+interface SetupContext<D> extends Context {
+  stores: Record<string, Persisted<unknown> | ((session: SessionRef) => Persisted<unknown>)>
+}
+
 interface Context {
   id: string
   options: PluginOptions
   client: OpenCodeClient
   app: App
   signal: AbortSignal
-  stores: Record<string, Persisted<unknown> | ((session: SessionRef) => Persisted<unknown>)>
   add<T>(registry: Registry<T>, item: () => T | undefined): Cleanup
   add<T>(registry: Registry<T>, item: T): Cleanup
   list<T>(registry: Registry<T>): T[]
@@ -1552,7 +1558,7 @@ composer?.attach({
   icon: "globe",
   subject: 'element <button id="submit">Save</button>',
   comment: "Make this button primary and disable it while saving.",
-  href: "https://localhost:3000/settings",
+  href: "http://localhost:3000/settings",
 })
 ```
 
@@ -2000,7 +2006,7 @@ const close = () => drawer?.close()
 
 ```ts
 function usePanel(): PanelFrame
-function useDrawer(): Drawer | undefined
+function useDrawer(): { close(): void; open(view: DrawerView): void } | undefined
 
 interface PanelFrame {
   visible(): boolean
@@ -2018,9 +2024,10 @@ interface PanelFrame {
   }
 }
 
-interface Drawer {
-  close(): void
-  open(view: { title: string; content: JSX.Element; trigger: HTMLElement }): void
+interface DrawerView {
+  title: string
+  content: JSX.Element
+  trigger: HTMLElement
 }
 ```
 
@@ -2115,7 +2122,7 @@ const count = () => {
 ```
 
 - `diffs(session)` is the current review mode's diffs, and `ready(session)` is `true` once they have loaded. Both are
-  reactive.
+  reactive. Only the routed session has changes; other sessions read as empty.
 - `kinds(session)` maps each changed file and directory to its `ChangeKind`.
 - `active(session)` is the file the review panel shows.
 - `details(session)` is the session directory's uncommitted changes, whatever the review mode.
@@ -2367,7 +2374,8 @@ export const main: Plugin.MainSetup = (ctx) => {
   every `changed`.
 - A method that throws rejects the window's call.
 - `changed` and `emit` reach every window when you omit `window`.
-- `dispose()` withdraws the `Ipc` early, and windows see it inactive. The host also withdraws it when the plugin stops.
+- `dispose()` withdraws the `Ipc` early. Windows see it `pending`, and `ctx.main` calls wait, until the plugin provides
+  it again or stops. The host also withdraws it when the plugin stops.
 
 #### Reference
 
@@ -2508,17 +2516,19 @@ interface MenubarItem {
 To embed an isolated `WebContentsView` in a panel, create it in `main` and render its box from the window.
 
 ```ts title="src/gui/main.ts"
-import { WebContentsView } from "electron"
+import { type BrowserWindow, WebContentsView } from "electron"
 import type { Plugin } from "@opencode/plugin/gui"
 
 export const main: Plugin.MainSetup = (ctx) => {
-  ctx.windows.on("open", (window) => {
+  const attach = (window: BrowserWindow) => {
     const view = new WebContentsView()
     const embed = ctx.embeds.create(view, window)
     void view.webContents.loadURL("https://acme.example")
     embed.show(true)
     // Send embed.id to the window over your Ipc.
-  })
+  }
+  ctx.windows.list().forEach(attach)
+  ctx.windows.on("open", attach)
 }
 ```
 
@@ -2526,6 +2536,7 @@ export const main: Plugin.MainSetup = (ctx) => {
 <ctx.embeds.View id={embedId} visible radius={8} />
 ```
 
+- `"open"` fires only for windows that open later, so attach to `ctx.windows.list()` first.
 - A window passes the embed's `id` to `ctx.embeds.View` and `ctx.embeds.capture`.
 - `show(visible)` is the page's side of visibility: the view shows only while the window lays it out and `show(true)`
   holds.
@@ -2683,4 +2694,4 @@ async main(ctx) {
 - `ctx.onCleanup` runs its functions when the plugin is disabled, reloaded, or removed, or the app quits, last
   registered first. It runs a function at once when the plugin is already gone.
 - After an `await`, return if `ctx.signal` aborted, before you register or change anything.
-- An `async` cleanup delays quitting until it settles.
+- An `async` cleanup delays quitting until it settles, for at most 3 seconds.

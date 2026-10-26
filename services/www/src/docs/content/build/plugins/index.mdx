@@ -83,6 +83,7 @@ plugin directories from other locations, add them to `plugins` in `opencode.json
 
 - One entry loads every part. The TUI loads the TUI parts of the plugins its server loads, and OpenCode Desktop loads
   the GUI parts of the plugins in your global `opencode.json(c)`.
+- A package with only a TUI part goes in [`cli.json`](/cli/plugins) instead.
 - A local plugin directory with a `package.json` `name` and `exports` loads its parts through them, like the published
   package. Without them, it uses file names at its root: `server` (else `index`), `tui`, and `rpc` with a `.ts`,
   `.tsx`, or `.js` extension, and `gui-experimental.cjs` (or `.js`).

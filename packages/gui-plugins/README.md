@@ -210,7 +210,7 @@ const screenActive = useQuery(() => ({
 
 Each line links to the file whose TSDoc covers every field.
 
-SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the app's icon catalog (`@opencode/ui/icons/catalog`), which `bun run generate` in `packages/plugin` copies into `src/gui/icon-name.ts`. `src/icon-name.typecheck.ts` fails the typecheck when the two drift.
+SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the app's icon catalog (`@opencode/ui/icons/catalog`), which `bun run generate` in `packages/plugin` copies into `packages/plugin/src/gui/icon-name.ts`. `src/icon-name.typecheck.ts` fails the typecheck when the two drift.
 
 ### Registries
 
