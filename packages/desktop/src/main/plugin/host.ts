@@ -957,6 +957,8 @@ export function createHost(input: {
       if (!known(id)) throw new PluginError("notFound")
 
       manager.setEnabled(id, false)
+      // Windows stop the plugin now; main's teardown may take until its deadline.
+      changed()
       await lifecycle.deactivate(id)
       // A plugin that is off shows no error from its last run.
       lifecycle.forget(id)

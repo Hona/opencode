@@ -67,6 +67,8 @@ function world() {
   const counter = { window: 0 }
   // Setups that finished after their instance stopped, and those that did while a replacement ran.
   const stats = { late: 0, overlapping: 0 }
+  // How often the lifecycle told the host its failures changed.
+  const notices = { changed: 0 }
   /** The instances neither stopped nor stopping. */
   const live = (id?: string) => made.filter((item) => !item.instance.scope.signal.aborted && (!id || item.id === id))
 
@@ -134,7 +136,7 @@ function world() {
         })
     },
     enabled: (id) => enabled.get(id) ?? true,
-    changed: () => {},
+    changed: () => void notices.changed++,
     log: (message, data) => logs.push({ message, data }),
   })
 
@@ -151,6 +153,7 @@ function world() {
     lifecycle,
     logs,
     stats,
+    notices,
     events,
     made,
     contributions,
@@ -413,6 +416,17 @@ describe("plugin lifecycle contracts", () => {
     await w.lifecycle.reload("a")
     expect(w.live("a")).toEqual([])
     expect(w.lifecycle.failure("a")).toBe("a2#2 setup failed")
+  })
+
+  test("a reload that clears a failure tells the host, so Settings drops the error", async () => {
+    const w = world()
+    w.revise("a", { setupFails: true })
+    await w.lifecycle.activate("a")
+    const before = w.notices.changed
+    w.revise("a")
+    await w.lifecycle.reload("a")
+    expect(w.lifecycle.failure("a")).toBeUndefined()
+    expect(w.notices.changed).toBeGreaterThan(before)
   })
 
   test.each([

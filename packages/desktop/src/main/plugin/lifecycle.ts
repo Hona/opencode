@@ -83,6 +83,11 @@ export function createLifecycle(input: {
     input.changed()
   }
 
+  // A new attempt clears the last failure; Settings and windows hear of it at once.
+  const clear = (id: string) => {
+    if (errors.delete(id)) input.changed()
+  }
+
   const create = (id: string, revision: Revision): Running => {
     const scope = Scope.make(id, { timeout: CLEANUP_TIMEOUT_MS, log: input.log })
     // The host's record of what the instance contributed; the host withdraws it the moment disposal starts.
@@ -251,7 +256,7 @@ export function createLifecycle(input: {
       const loader = input.loader(id)
 
       if (!loader || active.has(id) || !current(id, signal)) return
-      errors.delete(id)
+      clear(id)
       const revision = await load(id, signal, loader)
 
       // Stopped, disabled, or quitting while the code loaded: drop it, it may belong to an older revision.
@@ -283,7 +288,7 @@ export function createLifecycle(input: {
    * fails to load or set up leaves the last good revision running, with the failure recorded.
    */
   const reload = (id: string) => {
-    errors.delete(id)
+    clear(id)
     stop(id)
     const previous = active.get(id)
     // An instance still starting is no revision to keep: it stops at once, as on disable.
