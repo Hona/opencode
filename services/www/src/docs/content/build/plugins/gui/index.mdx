@@ -641,6 +641,7 @@ ctx.add(
   (): Command => ({
     id: "toggle",
     title: ctx.t("command.toggle"),
+    keywords: "notes scratch",
     group: ctx.t("command.category.view"),
     section: "terminal",
     bind: "ctrl+`",
@@ -657,6 +658,7 @@ ctx.add(
 ```
 
 - `title` is the palette label, `description` its second line, and `group` its category, as translated text.
+- `keywords` holds extra words the palette matches, separated by spaces.
 - `section` is the **Settings > Shortcuts** section. It defaults to `general`.
 - `bind` is the default keybind, for example `mod+shift+t`. Users can change it.
 - `slash` also offers the command in the `/` menu. With `arguments: true`, the text after the name goes to
@@ -675,6 +677,7 @@ interface Command {
   id: string
   title: string
   description?: string
+  keywords?: string
   group?: string
   section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
   bind?: string
@@ -691,7 +694,8 @@ interface Command {
 
 ### Panels
 
-`Panel` contributes tabs to a session's side region (`region: "side"`) or dock (`region: "dock"`).
+`Panel` contributes tabs to a session's side region (`region: "side"`). The user can drag a tab to a bottom pane below
+the timeline.
 
 ```tsx
 import { Panel, type PanelTab } from "@opencode/plugin/gui"
@@ -721,7 +725,8 @@ ctx.add(Panel, {
 })
 ```
 
-All panel callbacks (`list`, `render`, `focus`, `close`, `normalize`) receive a single input object:
+All panel callbacks (`list`, `render`, `focus`, `enter`, `close`, `closed`, `restore`, `normalize`) receive a single
+input object:
 
 - Read `props.session` and `props.tab` as reactive getters where you use them. Never destructure them at the top of
   `render`: when the user switches from session A to session B, the panel stays mounted and `props.session` updates in
@@ -736,12 +741,17 @@ A panel's callbacks:
 - `list` returns the tabs to show. `input.open` holds this plugin's tab ids stored in the session. It is reactive.
 - `render` renders a tab's content once.
 - `focus` runs when a tab is selected. `restored` is `true` for the selection the region mounts with.
+- `enter` runs when the user opens the side region on the tab with its toggle, once the tab is on screen. Move keyboard
+  focus to the tab's own target, such as a text field. When focus is still outside the region, the host focuses the
+  region.
 - `close` runs after the host removes a tab.
+- `closed` and `restore` let the user reopen a closed tab; see [Reopen closed tabs](#reopen-closed-tabs).
 - `normalize` returns the canonical form of a stored tab id that can be stored more than one way.
 
 A panel's options:
 
-- `mobile` adds a narrow-screen view of the panel.
+- `mobile` adds a narrow-screen view of the panel. With `cached: true`, the view stays mounted while the user shows
+  another view. By default, the view mounts each time it shows.
 - `wide` asks for the wider session minimum while the side region is open.
 - `transient` panels' tabs are not restored.
 
@@ -765,14 +775,17 @@ A tab's options:
 ```ts
 interface Panel {
   id: string
-  region: "side" | "dock"
+  region: "side"
   mobile?: MobileView
   wide?: boolean
   transient?: boolean
   list(input: { session: MountedSession; screen: SessionScreen; open: string[] }): PanelTab[]
   render(props: PanelProps): JSX.Element
   focus?(input: PanelProps & { restored: boolean }): void
+  enter?(input: PanelProps): void
   close?(input: PanelProps): void
+  closed?(input: PanelProps): ClosedPanelTab | false | undefined
+  restore?(input: { session: MountedSession; screen: SessionScreen; id: string; data?: string }): void
   normalize?(input: { id: string; session: MountedSession; screen: SessionScreen }): string
 }
 
@@ -803,6 +816,50 @@ interface MobileView {
   order: number
   kind: "tab" | "menu" | "drawer"
   icon?: IconName
+  cached?: boolean
+}
+```
+
+### Reopen closed tabs
+
+The host keeps an entry for each side tab the user closes. While focus is in the side region, ⌘⇧T reopens the newest
+one. The side region's **New tab** view lists closed tabs that show a `file` under **Recently closed**. Add `closed` and
+`restore` to control how a tab reads there and how it comes back.
+
+```tsx
+ctx.add(Panel, {
+  id: "page",
+  region: "side",
+  list: (input) => input.open.map(pageTab),
+  render: (props) => <PageView tab={props.tab} />,
+  closed: (input) => {
+    const url = pages.get(input.tab.id)
+
+    return url ? { icon: "globe", detail: new URL(url).host, data: url } : false
+  },
+  restore: (input) => {
+    if (input.data) openPage(input.session, input.data)
+  },
+})
+```
+
+- `closed` runs as the user closes a tab. Capture what reopening needs now: return how the row reads and the `data`
+  that `restore` needs, or `false` when the tab cannot come back.
+- `title` defaults to the tab's title, and `icon` to the panel's mobile icon. A tab with a `file` shows its file icon,
+  and its folder as `detail`.
+- The host stores the entry, so keep `data` small, such as a URL.
+- `restore` receives the closed tab's `id` and the `data` that `closed` returned. Without `restore`, the host opens the
+  same key again.
+- Without `closed`, a tab that is not `transient` lists under its title and reopens under the same key.
+
+#### Reference
+
+```ts
+interface ClosedPanelTab {
+  title?: string
+  icon?: IconName
+  detail?: string
+  data?: string
 }
 ```
 
@@ -859,7 +916,7 @@ interface SettingEntry {
 
 ### Slots
 
-`Slot` renders UI into one of four window slots.
+`Slot` renders UI into one of five window slots.
 
 ```tsx
 import { Slot } from "@opencode/plugin/gui"
@@ -872,25 +929,43 @@ ctx.add(Slot, {
 ```
 
 - `window.bottom` is a full-width strip at the bottom of the window, above toasts.
-- `session.header` is the session timeline's title row.
-- `session.panel.end` holds actions at the trailing end of the side panel's tab strip.
-- `session.panel.sidebar` is the side panel's collapsible inner sidebar.
+- `session.header` is the session timeline's title row. A cached timeline stays mounted while hidden, with `active`
+  `false`.
+- `session.location.menu` adds items to the project menu, after its location details.
+- `session.location.workspace` replaces the project menu's current location row. `label` is the current worktree's
+  name, or the label of the local repository, and `icon` is the location's icon.
+- `session.panel.end` holds actions at the trailing end of the side region's tab strip.
 - `order` sorts the items in one slot.
+
+The project menu slots receive `shown`, which is `true` while the project menu is open. Subscribe to location data only
+while it is `true`:
+
+```tsx
+ctx.add(Slot, {
+  at: "session.location.menu",
+  render: (input) => <BranchStatus session={input.session} screen={input.screen} shown={input.shown} />,
+})
+```
 
 #### Reference
 
 ```ts
-interface Slot<At extends keyof SlotMap> {
-  at: At
-  order?: number
-  render(input: SlotMap[At]): JSX.Element
-}
+type Slot = {
+  [At in keyof SlotMap]: { at: At; order?: number; render(input: SlotMap[At]): JSX.Element }
+}[keyof SlotMap]
 
 interface SlotMap {
-  "window.bottom": {}
+  "window.bottom": Record<string, never>
   "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
+  "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
+  "session.location.workspace": {
+    screen: SessionScreen
+    session: MountedSession
+    shown: boolean
+    label: string
+    icon: IconName
+  }
   "session.panel.end": { screen: SessionScreen; session: MountedSession }
-  "session.panel.sidebar": { screen: SessionScreen; session: MountedSession }
 }
 ```
 
@@ -902,27 +977,39 @@ or each server's row menu in Settings (`"server.row"`).
 ```ts
 import { MenuItem } from "@opencode/plugin/gui"
 
-ctx.add(
-  MenuItem,
-  (): MenuItem => ({
+ctx.add(MenuItem, (): MenuItem => {
+  const session = ctx.sessions.current()
+
+  return {
     menu: "session.panel",
     id: "open",
     title: ctx.t("menu.open"),
     icon: "folder",
     keybind: `${ctx.id}.open`,
+    opened: !!session && ctx.layout.state(`${ctx.id}:main`, session) !== "closed",
     run: () => {
-      const session = ctx.sessions.current()
-
       if (session) ctx.layout.open(`${ctx.id}:main`, session)
     },
-  }),
-)
+  }
+})
 ```
 
 - `order` sorts the items in ascending order. It defaults to `0`.
-- A `session.panel` item can show an `icon`, and the shortcut of the published command id in `keybind`.
 - A `server.row` item's `run` receives the row's server key. `when` lists the item only on some rows, and `enabled`
   shows it disabled on others.
+
+A `session.panel` item is also a launcher. When the user opens the side region with no tabs, or clicks **+** while no
+item is `primary`, the host shows a **New tab** view that lists the launchers.
+
+- `icon` is the item's icon, and `keybind` a published command id whose shortcut the item shows.
+- `description` is a short muted detail after the title in a launcher row, such as a count.
+- `opened: true` means the tab the item opens is already open. Launcher lists leave the item out, and the **+** menu
+  still lists it.
+- `primary: true` makes **+** run the item directly instead of showing the launchers. The first primary item in `order`
+  wins. Opening the side region with no tabs still shows the **New tab** view, which lists the items that are not
+  primary and not open.
+- `ctx.layout.side.menu()` lists every plugin's `session.panel` items, for a launcher of your own; see
+  [Layout](#layout).
 
 #### Reference
 
@@ -936,6 +1023,9 @@ interface SessionPanelMenuItem {
   order?: number
   icon?: IconName
   keybind?: string
+  description?: string
+  opened?: boolean
+  primary?: true
   run(): void
 }
 
@@ -1179,7 +1269,7 @@ interface Context {
 ### Layout
 
 `ctx.layout.open(key, session, options?)` opens a panel tab by its key, `<plugin id>:<tab id>`. It works for sessions
-that are not mounted, and a `dock` panel's key opens the dock.
+that are not mounted.
 
 ```ts
 const session = ctx.sessions.current()
@@ -1191,15 +1281,33 @@ if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", backgro
   it without selecting it, and `"select"` adds and selects it, keeping the preview.
 - `background: true` keeps the current view on narrow screens and opens the side region, for an action the user did
   not start from the panel.
-- `state(key, session)` is `"closed"` when the tab is not in the strip, `"open"` when it is but is not selected,
-  `"active"` when it is selected with the side region closed, and `"visible"` when it is selected and on screen. A dock
-  is `"closed"` or `"visible"`.
+- `close(key, session)` removes the tab and calls its panel's `close`. `toggle(key, session)` closes a visible tab, else
+  opens it.
+- `hide(key, session)` hides the pane that shows a visible tab, without closing the tab: the side region, or the bottom
+  pane for a tab the user moved there. Opening the tab again shows its pane.
+- `state(key, session)` is `"closed"` when the tab is not in the strip, `"open"` when it is but its pane shows another
+  tab, `"active"` when its pane shows it but the pane is hidden (the side region is closed, or the bottom pane is
+  hidden), and `"visible"` when it is on screen.
 - `stored(session)` is this plugin's tab ids stored in the session's side strip.
 - `ready()` is `true` once the stored layout has loaded, and `narrow()` while the viewport is under 768px.
+- `side.opened(session)` is `true` while the side region is open, and `side.toggle(session)` opens or closes it.
+- `side.menu()` lists every plugin's `session.panel` [menu items](#menu-items) in `order`, for a launcher of your own.
 - `sidebar.opened()` is the inner sidebar preference that every side panel shares.
-- `dock.placement()` is where the dock sits: at the `"side"` or the `"bottom"`.
 - `scroll` stores scroll offsets per session and key.
 - `settings(page?)` opens Settings. `project(server, title)` opens a project's directory picker and a new draft.
+- `draft({ server, directory, prompt })` opens a new draft session in its own tab, with the prompt filled in for the
+  user to review and send.
+- `command(id)` runs an app command as the command palette does, such as `session.export`. It does nothing when the
+  command is unavailable or disabled.
+
+```ts
+const session = ctx.sessions.current()
+const launchers = () => ctx.layout.side.menu().filter((item) => !item.primary && !item.opened)
+
+if (session) {
+  ctx.layout.draft({ server: session.server.id, directory: session.directory, prompt: ctx.t("setup.prompt") })
+}
+```
 
 #### Reference
 
@@ -1208,20 +1316,18 @@ interface Layout {
   open(key: string, session: SessionRef, options?: OpenOptions): void
   close(key: string, session: SessionRef): void
   toggle(key: string, session: SessionRef): void
-  state(key: string, session: SessionRef): "closed" | "open" | "active" | "visible"
+  hide(key: string, session: SessionRef): void
+  state(key: string, session: SessionRef): PanelState
   stored(session: SessionRef): string[]
   ready(): boolean
   narrow(): boolean
   side: {
     opened(session: SessionRef): boolean
     toggle(session: SessionRef): void
+    menu(): SessionPanelMenuItem[]
   }
   sidebar: {
     opened(): boolean
-  }
-  dock: {
-    opened(session: SessionRef): boolean
-    placement(): "side" | "bottom"
   }
   scroll: {
     get(session: SessionRef, key: string): { x: number; y: number } | undefined
@@ -1229,7 +1335,11 @@ interface Layout {
   }
   settings(page?: string): void
   project(server: string, title: string): void
+  draft(input: { server: string; directory: string; prompt: string }): void
+  command(id: string): void
 }
+
+type PanelState = "closed" | "open" | "active" | "visible"
 
 interface OpenOptions {
   tab?: "open" | "preview" | "append" | "select"
@@ -1257,7 +1367,9 @@ if (session && file) void file.sync("README.md")
 - `background` lists the shell commands and subagents the session moved to the background.
 - `ctx.sessions.list()` returns the sessions of the open shell tabs.
 - The screen's `file` reads the workspace's files, and `comment` holds the line comments of the next prompt.
-  `composer` attaches parts to it; see [the next section](#attach-files-and-notes-to-the-composer).
+  `composer` attaches parts to it; see [the next section](#attach-to-the-composer).
+- `file.sync(path)` loads a file and asks the server to watch it for changes. Call `file.unwatch(path)` when the file's
+  tab closes.
 
 #### Reference
 
@@ -1303,6 +1415,7 @@ interface Files {
   get(path: string): FileState | undefined
   missing(path: string): boolean
   sync(path: string, options?: { force?: boolean; silent?: boolean }): Promise<void>
+  unwatch(path: string): void
   exists(path: string): Promise<boolean>
   search(query: string, options?: { kind?: "file" | "any"; limit?: number; signal?: AbortSignal }): Promise<string[]>
   selection: {
@@ -1338,10 +1451,10 @@ interface Comments {
 }
 ```
 
-### Attach files and notes to the composer
+### Attach to the composer
 
-Use `ctx.screen.current()?.composer` in an event handler or command to attach a file or a note to the user's next
-prompt.
+Use `ctx.screen.current()?.composer` in an event handler or command to attach a file, a note, or a quote to the user's
+next prompt.
 
 ```ts
 const composer = ctx.screen.current()?.composer
@@ -1358,16 +1471,47 @@ composer?.attach({
 })
 ```
 
-- `update(commentID, { comment?, preview? })` changes an attached part; a note takes only a new `comment`.
+- `attach` leaves keyboard focus where it is. Call `focus()` to move it to the prompt.
+- `update(commentID, { comment?, preview? })` changes an attached part; a note or a quote takes only a new `comment`.
 - `detach(commentID)` removes an attached part.
 - A note's `live` replaces its `subject` and `href` while the note stays in this app process, for references only this
-  process can resolve, such as a page element. A stored draft drops it.
+  process can resolve, such as a page element. A stored draft drops it, and so does a sent message that a revert or a
+  fork restores.
+
+A quote is text the user quoted from something your plugin shows, such as log output, with an optional comment. It
+renders like a quote from the session timeline, under the source's icon and label. Check `quotable()` first: it is
+`false` in a subagent's session, which has no composer, and while the composer runs shell commands.
+
+```ts
+const composer = ctx.screen.current()?.composer
+
+if (composer?.quotable()) {
+  const commentID = crypto.randomUUID()
+
+  composer.attach({
+    type: "quote",
+    commentID,
+    text: selection,
+    source: { label: ctx.t("source.label"), icon: "console", subject: "the Acme log" },
+  })
+  composer.focus(commentID)
+}
+```
+
+- `source.subject` names the source for the model, for example `the terminal`. It is not localized.
+- Omit `comment` to let the user add one from the chip.
+- `focus(commentID)` opens the comment editor of an attached quote. While the composer is not shown, such as on a narrow
+  screen that shows a panel, the editor opens once the composer shows.
+- The model reads `The user quoted the following from <subject>:`, then the text with each line prefixed with `> `,
+  then the comment, if any.
 
 #### Reference
 
 ```ts
 interface Composer {
-  attach(part: ComposerFile | ComposerNote): void
+  attach(part: ComposerFile | ComposerNote | ComposerQuote): void
+  quotable(): boolean
+  focus(commentID?: string): void
   update(id: string, patch: { comment?: string; preview?: string }): void
   detach(id: string): void
 }
@@ -1392,6 +1536,14 @@ interface ComposerNote {
   comment: string
   href?: string
   live?: { subject: string; href?: string }
+}
+
+interface ComposerQuote {
+  type: "quote"
+  commentID: string
+  text: string
+  comment?: string
+  source: { label: string; icon: IconName; subject: string }
 }
 ```
 
@@ -1512,7 +1664,8 @@ const show = async (path: string) => {
   file manager.
 - `ctx.embeds` renders a main-process web view in a window; see
   [Embedded web views](#embedded-web-views).
-- `ctx.locale` and `ctx.appearance` read the interface language, its writing direction, and the user's monospace font.
+- `ctx.locale` reads the interface language and its writing direction. `ctx.appearance.font("mono")` is the CSS font
+  family of the user's terminal font.
 - `ctx.router` reads the current route path and whether a route transition is in progress.
 - `ctx.workspaces.on("remove", handler)` runs when the user removes a workspace directory from a server, so you can
   clean up stores scoped to it.
@@ -1668,12 +1821,19 @@ and its dependencies' restarts, which hand-written effects tend to get wrong.
 `createKeyed(source, fn, { otherwise?, equals? })` runs `fn` in a fresh owner for each key: each active generation of a
 `ctx.use` accessor, or each value of a plain accessor. Anything registered inside `fn` ends with that run.
 
-```ts
+```tsx
 import { onCleanup } from "solid-js"
-import { createKeyed } from "@opencode/plugin/gui"
+import { createKeyed, usePlugin, type SessionScreen } from "@opencode/plugin/gui"
 import { Changes } from "@opencode/plugin/gui/review"
 
-createKeyed(ctx.use(Changes), (changes) => onCleanup(changes.onReveal(() => refresh())))
+function ChangedFiles(props: { readonly screen: SessionScreen }) {
+  const ctx = usePlugin()
+
+  // Each active generation of Changes keeps this view's changes loaded; the watch ends with it.
+  createKeyed(ctx.use(Changes), (changes) => onCleanup(changes.watch(props.screen, "files")))
+
+  return <FileMarkers screen={props.screen} />
+}
 ```
 
 - `otherwise` runs while the source has no key: a `Live` accessor that is not active, or a plain accessor whose value
@@ -1744,8 +1904,7 @@ const compact = () => panel.placement() === "mobile"
 const close = () => drawer?.close()
 ```
 
-- `placement()` is `"side"` in the side region or a dock beside the timeline, `"bottom"` in a dock below the timeline,
-  and `"mobile"` in a narrow-screen view.
+- `placement()` is `"side"` in the side region and `"mobile"` in a narrow-screen view.
 - `visible()` is `true` while the region is open and this tab is selected. `present()` stays `true` while the region
   animates closed.
 - `reserve()` asks you to leave room at the end of a header for the host's region toggle.
@@ -1762,7 +1921,7 @@ function useDrawer(): Drawer | undefined
 interface PanelFrame {
   visible(): boolean
   present(): boolean
-  placement(): "side" | "bottom" | "mobile"
+  placement(): "side" | "mobile"
   reserve(): boolean
   animate(): boolean
   open(): string[]
@@ -1802,7 +1961,8 @@ ctx.add(FileViewer, {
 ```
 
 - **`FileTree`** is a contract. `Tree` and `List` render a virtualized tree or list of workspace files with change
-  markers. Read it with `ctx.use(FileTree)`.
+  markers. Read it with `ctx.use(FileTree)`. A tree's `labels` adds text after a folder's name, such as how many
+  entries it has.
 - **`OpenInApp`** is a contract. `Button` is the desktop **Open in** button for a session's workspace.
 - **`FileViewer`** is a registry. A viewer lists the `kinds` it renders, can reject bytes with `problem`, and renders a
   `View` that reports `onDetails` and `onError`.
@@ -1820,6 +1980,7 @@ interface FileTreeProps {
   session: MountedSession
   allowed: string[]
   kinds?: Map<string, ChangeKind>
+  labels?: Map<string, string>
   active?: string
   onFileClick(path: string): void
 }
@@ -1875,8 +2036,11 @@ const count = () => {
 - `active(session)` is the file the review panel shows.
 - `details(session)` is the session directory's uncommitted changes, whatever the review mode.
 - `focus(session, path)` shows a file in the review panel, and `open(session)` shows all changes.
-- `watch(screen, source)` keeps a view's changes loaded while it shows them. It returns a function that stops watching.
-- `onReveal(listener)` runs when review reveals a change, for example from a composer comment.
+- `watch(screen, source)` keeps the changes of a view loaded while it shows them, across the view's session switches.
+  Pass the owning screen from the panel or slot input. It returns a function that stops watching; see
+  [createKeyed](#createkeyed).
+- A `tree` watch is a persistent change list: opening the side region refreshes it. A `details` watch loads
+  `details(session)`.
 
 #### Reference
 
@@ -1890,7 +2054,6 @@ interface Changes {
   focus(session: SessionRef, path: string): void
   open(session: SessionRef): void
   watch(screen: SessionScreen, source: "tree" | "files" | "details"): () => void
-  onReveal(listener: () => void): () => void
 }
 
 type ChangeKind = "add" | "del" | "mix"
@@ -2291,6 +2454,8 @@ export const main: Plugin.MainSetup = (ctx) => {
   dialog occlusion in step, and hides it while the window is hidden or a dialog is open.
 - `frozen` paints a still in place of the live view, so DOM content can float above it. `radius` rounds the bottom
   corners, and `background` is the color the corners show.
+- `page` is what the embed shows, such as its URL. While a panel moves, the host paints a still of the embed in its
+  place, and drops a still taken while `page` had another value.
 - The window's `capture(id)` returns a JPEG still, or `undefined` while the embed is hidden and always on the web.
 
 #### Reference
@@ -2317,6 +2482,7 @@ interface EmbedProps {
   id: string | undefined
   visible: boolean
   frozen?: boolean
+  page?: string
   radius?: number
   background?: string
   class?: string
