@@ -3014,14 +3014,8 @@ export type PluginListInput = { readonly location?: { readonly directory?: strin
 export type PluginListOutput = { location: LocationPublicRef; data: Array<PluginInfo> }
 
 export type PluginGuiInput = {
-  readonly location?: {
-    readonly location?: { readonly directory?: string | undefined } | undefined
-    readonly id: string
-  }["location"]
-  readonly id: {
-    readonly location?: { readonly directory?: string | undefined } | undefined
-    readonly id: string
-  }["id"]
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly id: string
 }
 
 export type PluginGuiOutput = { location: LocationPublicRef; data: PluginGuiBundle }
