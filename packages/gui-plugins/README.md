@@ -214,26 +214,27 @@ SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the
 
 ### Registries
 
-| Registry                                          | Process | What an item is                                                                                                           |
-| ------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
-| [`Command`](../plugin/src/gui/registries.ts)      | window  | A palette command with an optional keybind and slash command                                                              |
-| [`MenuItem`](../plugin/src/gui/registries.ts)     | window  | An item of a host menu: the side panel + menu, Add server, a server row                                                   |
-| [`Panel`](../plugin/src/gui/registries.ts)        | window  | Tabs in the session's side region                                                                                         |
-| [`SettingsPage`](../plugin/src/gui/registries.ts) | window  | A settings page, a section on a host page, or rows in a host section                                                      |
-| [`Server`](../plugin/src/gui/registries.ts)       | window  | A source of servers, such as SSH hosts                                                                                    |
-| [`LinkHandler`](../plugin/src/gui/registries.ts)  | window  | Opens local links, such as file paths in messages, and says whether their target exists                                   |
-| [`TitlebarItem`](../plugin/src/gui/registries.ts) | window  | A pill in the titlebar or the tabs footer                                                                                 |
-| [`ComposerPill`](../plugin/src/gui/registries.ts) | window  | A pill in the row above a session's composer, optionally opening a menu of rows                                           |
-| [`Slot`](../plugin/src/gui/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.location.workspace`, `session.location.menu`, `session.panel.end` |
-| [`Style`](../plugin/src/gui/registries.ts)        | window  | CSS imported with `?inline`                                                                                               |
-| [`MenubarItem`](../plugin/src/gui/main.ts)        | main    | An item of the native app menu                                                                                            |
+| Registry                                          | Process | What an item is                                                                                                                                                     |
+| ------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`Command`](../plugin/src/gui/registries.ts)      | window  | A palette command with an optional keybind and slash command                                                                                                        |
+| [`MenuItem`](../plugin/src/gui/registries.ts)     | window  | An item of a host menu: the side panel + menu, Add server, a server row                                                                                             |
+| [`Panel`](../plugin/src/gui/registries.ts)        | window  | Tabs in the session's side region                                                                                                                                   |
+| [`SettingsPage`](../plugin/src/gui/registries.ts) | window  | A settings page, a section on a host page, or rows in a host section                                                                                                |
+| [`Server`](../plugin/src/gui/registries.ts)       | window  | A source of servers, such as SSH hosts                                                                                                                              |
+| [`LinkHandler`](../plugin/src/gui/registries.ts)  | window  | Opens local links, such as file paths in messages, and says whether their target exists                                                                             |
+| [`TitlebarItem`](../plugin/src/gui/registries.ts) | window  | A pill in the titlebar or the tabs footer                                                                                                                           |
+| [`ComposerPill`](../plugin/src/gui/registries.ts) | window  | A pill in the row above a session's composer, optionally opening a menu of rows                                                                                     |
+| [`Slot`](../plugin/src/gui/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.location.menu`, `session.panel.end`; built-ins also fill `session.location.workspace` through `BuiltinSlot` |
+| [`Style`](../plugin/src/gui/registries.ts)        | window  | CSS imported with `?inline`                                                                                                                                         |
+| [`MenubarItem`](../plugin/src/gui/main.ts)        | main    | An item of the native app menu                                                                                                                                      |
 
 `session.location.menu` contributes items after the project menu's location details. It receives the owning `screen`,
 the live `session`, and `shown`; keep data subscriptions active only while `shown` is true. Loading headers without an
 owning screen show the host's location details without this slot.
 
-`session.location.workspace` replaces the current location row with the same session context plus its `label` and
-`icon`. Without a contribution, the host keeps its static location row. Use it to attach location actions directly
+`session.location.workspace` (built-ins only, through `BuiltinSlot`) replaces the current location row with the same
+session context plus its `label` and `icon`; one contribution owns it. Without a contribution, the host keeps its
+static location row. Use it to attach location actions directly
 to the displayed repository or worktree instead of adding a second menu item.
 
 ### Host APIs

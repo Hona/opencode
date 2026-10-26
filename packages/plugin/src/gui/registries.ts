@@ -310,9 +310,10 @@ export interface Panel {
    */
   close?(input: PanelProps): void
   /**
-   * Read as the user closes a tab, for the new tab view's "Recently closed" list and ⌘⇧T. Return how the row reads and
-   * the data `restore` needs, or `false` when the tab cannot come back. Without it, a tab that is not `transient`
-   * lists under its title and reopens under the same key. The host stores the entry, so keep `data` small.
+   * Read as the user closes a tab, so it can come back: ⌘⇧T in the side region reopens the newest closed tab, and the
+   * new tab view's "Recently closed" list shows closed tabs with a `file`. Return how the entry reads and the data
+   * `restore` needs, or `false` when the tab cannot come back. Without it, a tab that is not `transient` comes back
+   * under the same key. The host stores the entry, so keep `data` small.
    *
    * @param input - The closing tab, routed session and owning screen. Capture what reopening needs now.
    */
@@ -663,13 +664,6 @@ export interface SlotMap {
     readonly session: MountedSession
     /** Whether the project menu is open. Subscribe to location data only while true. */
     readonly shown: boolean
-  }
-  /** Replaces the project menu's current location row. Without a contribution the host shows a static row. */
-  readonly "session.location.workspace": SlotMap["session.location.menu"] & {
-    /** The current worktree name, or the localized label for the local repository. */
-    readonly label: string
-    /** The location icon: monitor for the local repository, worktree for a worktree. */
-    readonly icon: IconName
   }
   /** The actions at the end of the side region's tab strip. */
   readonly "session.panel.end": {

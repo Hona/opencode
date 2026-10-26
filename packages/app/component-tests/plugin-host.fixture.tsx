@@ -5,7 +5,6 @@ import {
   type Appearance,
   type App,
   type Keybinds,
-  type Layout,
   type MountedSession,
   type Router,
   type Servers,
@@ -18,7 +17,7 @@ import {
   type StoreOptions,
   type Workspaces,
 } from "@opencode/plugin/gui"
-import type { BuiltinLocale } from "@opencode/plugin/gui/builtin"
+import type { BuiltinLayout, BuiltinLocale } from "@opencode/plugin/gui/builtin"
 import {
   createComponent,
   createMemo,
@@ -74,7 +73,7 @@ type Json = string | number | boolean | null | readonly Json[] | { readonly [key
 
 export { createComponent, createMemo, createSignal, getOwner, onCleanup, runWithOwner }
 
-const layout: Layout = {
+const layout: BuiltinLayout = {
   narrow: () => false,
   ready: () => true,
   open() {},

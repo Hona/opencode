@@ -2,7 +2,7 @@ import { lazy, onCleanup, Show, Suspense } from "solid-js"
 import { Panel, Slot, Style, usePanel, type Plugin } from "@opencode/plugin/gui"
 import type Details from "./index"
 import { DetailsHeader, type DetailsMenus } from "./popover"
-import { onIdle } from "@opencode/plugin/gui/builtin"
+import { BuiltinSlot, onIdle } from "@opencode/plugin/gui/builtin"
 
 const setup: Plugin.Setup<typeof Details> = (ctx) => {
   const sessions = ctx.sessions
@@ -46,7 +46,7 @@ const setup: Plugin.Setup<typeof Details> = (ctx) => {
     ),
   })
 
-  ctx.add(Slot, {
+  ctx.add(BuiltinSlot, {
     at: "session.location.workspace",
     render: (input) => (
       <Suspense>

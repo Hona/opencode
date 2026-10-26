@@ -916,7 +916,7 @@ interface SettingEntry {
 
 ### Slots
 
-`Slot` renders UI into one of five window slots.
+`Slot` renders UI into one of four window slots.
 
 ```tsx
 import { Slot } from "@opencode/plugin/gui"
@@ -932,12 +932,10 @@ ctx.add(Slot, {
 - `session.header` is the session timeline's title row. A cached timeline stays mounted while hidden, with `active`
   `false`.
 - `session.location.menu` adds items to the project menu, after its location details.
-- `session.location.workspace` replaces the project menu's current location row. `label` is the current worktree's
-  name, or the label of the local repository, and `icon` is the location's icon.
 - `session.panel.end` holds actions at the trailing end of the side region's tab strip.
 - `order` sorts the items in one slot.
 
-The project menu slots receive `shown`, which is `true` while the project menu is open. Subscribe to location data only
+`session.location.menu` receives `shown`, which is `true` while the project menu is open. Subscribe to location data only
 while it is `true`:
 
 ```tsx
@@ -958,13 +956,6 @@ interface SlotMap {
   "window.bottom": Record<string, never>
   "session.header": { screen: SessionScreen; session: MountedSession; active: boolean }
   "session.location.menu": { screen: SessionScreen; session: MountedSession; shown: boolean }
-  "session.location.workspace": {
-    screen: SessionScreen
-    session: MountedSession
-    shown: boolean
-    label: string
-    icon: IconName
-  }
   "session.panel.end": { screen: SessionScreen; session: MountedSession }
 }
 ```
@@ -1393,8 +1384,6 @@ if (session) ctx.layout.open(`${ctx.id}:main`, session, { tab: "select", backgro
 - `settings(page?)` opens Settings. `project(server, title)` opens a project's directory picker and a new draft.
 - `draft({ server, directory, prompt })` opens a new draft session in its own tab, with the prompt filled in for the
   user to review and send.
-- `command(id)` runs an app command as the command palette does, such as `session.export`. It does nothing when the
-  command is unavailable or disabled.
 
 ```ts
 const session = ctx.sessions.current()
@@ -1432,7 +1421,6 @@ interface Layout {
   settings(page?: string): void
   project(server: string, title: string): void
   draft(input: { server: string; directory: string; prompt: string }): void
-  command(id: string): void
 }
 
 type PanelState = "closed" | "open" | "active" | "visible"

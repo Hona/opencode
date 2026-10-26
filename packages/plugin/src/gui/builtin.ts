@@ -4,9 +4,10 @@
 import type { Schema } from "effect"
 import type { Context } from "./context.js"
 import { Registry, type Catalog, type Messages, type Persisted, type StoreDeclaration, type StoreFrom } from "./core.js"
-import type { Desktop, Locale, StorageScope, StoreOptions } from "./host-apis.js"
+import type { Desktop, Layout, Locale, StorageScope, StoreOptions } from "./host-apis.js"
 import type { MainContext } from "./main.js"
-import type { Command, Panel, PanelTab } from "./registries.js"
+import type { Command, IconName, Panel, PanelTab, SlotMap } from "./registries.js"
+import { type JSX } from "solid-js"
 
 /**
  * Runs fn when the main thread is idle (a short timeout where requestIdleCallback is missing, e.g. Safari). Load lazy
@@ -94,6 +95,46 @@ export interface BuiltinPanel extends Panel {
  * ```
  */
 export const BuiltinPanel = Registry.define<BuiltinPanel>("panel")
+
+/** The slots of `SlotMap`, and those only built-ins fill. */
+export interface BuiltinSlotMap extends SlotMap {
+  /**
+   * Replaces the project menu's current location row; one contribution owns it. Without one the host shows a static
+   * row.
+   */
+  readonly "session.location.workspace": SlotMap["session.location.menu"] & {
+    /** The current worktree name, or the localized label for the local repository. */
+    readonly label: string
+    /** The location icon: monitor for the local repository, worktree for a worktree. */
+    readonly icon: IconName
+  }
+}
+
+/** A `Slot` that may also fill the slots only built-ins use. */
+export type BuiltinSlot = {
+  [At in keyof BuiltinSlotMap]: {
+    /** The slot; see `BuiltinSlotMap`. */
+    readonly at: At
+    /** Slot contents render in ascending order. Defaults to 0. */
+    readonly order?: number
+    /**
+     * Renders the content once; its own reactivity updates it.
+     *
+     * @param input - The slot's input.
+     */
+    render(input: BuiltinSlotMap[At]): JSX.Element
+  }
+}[keyof BuiltinSlotMap]
+
+/**
+ * The `Slot` registry, with the slots only built-ins fill. The host reads every slot through it.
+ *
+ * @example
+ * ```ts
+ * ctx.add(BuiltinSlot, { at: "session.location.workspace", render: (input) => <Row {...input} /> })
+ * ```
+ */
+export const BuiltinSlot = Registry.define<BuiltinSlot>("slot")
 
 /**
  * An older home of a built-in's window value, imported once into a store that has no value yet: a `StoreFrom` key, or
@@ -223,6 +264,17 @@ export interface BuiltinDesktop extends Desktop {
   forceFocus(enabled: boolean): Promise<void>
 }
 
+/** `Layout` with the abilities only built-ins use. */
+export interface BuiltinLayout extends Layout {
+  /**
+   * Runs an app command as the command palette does, e.g. `mcp.toggle` (the `/mcp` dialog). Does nothing when the
+   * command is unavailable or disabled. App command ids are the app's own, not a plugin contract.
+   *
+   * @param id - The app command's id.
+   */
+  command(id: string): void
+}
+
 /** `Locale` with the abilities only built-ins use. */
 export interface BuiltinLocale extends Locale {
   /**
@@ -239,6 +291,8 @@ export interface BuiltinContext extends Context {
   readonly desktop: BuiltinDesktop | undefined
   /** The interface language and its writing direction, which `setDirection` overrides. */
   readonly locale: BuiltinLocale
+  /** The session layout, with `command`. */
+  readonly layout: BuiltinLayout
   /** Stores whose older homes may be parts of shared app keys. */
   readonly storage: BuiltinStorage
 }

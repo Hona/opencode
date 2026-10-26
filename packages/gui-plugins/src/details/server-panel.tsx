@@ -26,6 +26,7 @@ import { createStore } from "solid-js/store"
 import { createKeyed, useDrawer, usePlugin, type MountedSession } from "@opencode/plugin/gui"
 import { globalConfigDirectory, serviceConfigFile } from "./config-file"
 import { configuredLsps } from "./configured-lsp"
+import { builtinContext } from "@opencode/plugin/gui/builtin"
 
 const services = [
   { type: "mcp", icon: "mcp", label: "mcp" },
@@ -678,7 +679,7 @@ function useMcp(props: ServiceProps, close: () => void): ServiceSource {
             class="session-service-config"
             onClick={() => {
               close()
-              ctx.layout.command("mcp.toggle")
+              builtinContext(ctx).layout.command("mcp.toggle")
             }}
           >
             <Icon name="mcp" class="shrink-0 text-v2-icon-icon-muted" />

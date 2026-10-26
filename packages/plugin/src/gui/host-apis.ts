@@ -858,13 +858,6 @@ export interface Layout {
     /** The prompt the draft starts with. */
     readonly prompt: string
   }): void
-  /**
-   * Runs an app command as the command palette does, e.g. `mcp.toggle` (the `/mcp` dialog) or `session.export`.
-   * Does nothing when the command is unavailable or disabled.
-   *
-   * @param id - The app command's id.
-   */
-  command(id: string): void
 }
 
 /**

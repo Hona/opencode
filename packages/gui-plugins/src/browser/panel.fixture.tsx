@@ -30,7 +30,6 @@ import {
   type Ipc,
   type IpcClient,
   type Keybinds,
-  type Layout,
   type Locale,
   type MountedSession,
   type Mutable,
@@ -54,6 +53,7 @@ import SessionBrowserPane from "./panel"
 import { BrowserPane, type PaneEvent } from "./ipc"
 import { pageShortcut } from "./keys"
 import { refusal } from "./policy"
+import { type BuiltinLayout } from "@opencode/plugin/gui/builtin"
 
 /** The renderer host pieces the pane runs on, passed in by `packages/app/component-tests/browser-pane.spec.ts`. */
 type PaneHost = {
@@ -820,7 +820,7 @@ export function mountBrowserRegion(input: RegionHost) {
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const screen = { file, composer: { attach() {} } } as unknown as SessionScreen
 
-    const layout = (plugin: string): Layout => ({
+    const layout = (plugin: string): BuiltinLayout => ({
       narrow: () => false,
       ready: () => true,
       open(key, session, options) {

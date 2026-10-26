@@ -1,10 +1,10 @@
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { Show } from "solid-js"
-import type { SlotMap } from "@opencode/plugin/gui"
+import type { BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
 import { SessionWorkspaceMenu } from "./workspace-menu"
 
-export default function SessionLocationWorkspace(props: SlotMap["session.location.workspace"]) {
+export default function SessionLocationWorkspace(props: BuiltinSlotMap["session.location.workspace"]) {
   const location = () => (
     <>
       <Icon name={props.icon} class="text-v2-icon-icon-muted" />

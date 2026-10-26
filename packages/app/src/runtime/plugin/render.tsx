@@ -3,7 +3,8 @@ import { Portal } from "solid-js/web"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { SourcesProvider } from "@opencode/session-ui/context/sources"
 import { sourcesExperiment } from "@opencode/session-ui/sources/experiment"
-import { Slot, Style, type MountedSession, type SlotMap } from "@opencode/plugin/gui"
+import { Style, type MountedSession } from "@opencode/plugin/gui"
+import { BuiltinSlot, type BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
 import { PluginContext } from "@opencode/plugin/gui/host"
 import { usePluginHost } from "./host"
 
@@ -33,12 +34,16 @@ export function Contribution(props: { plugin: string; children: () => JSX.Elemen
   )
 }
 
-export function PluginSlot<At extends keyof SlotMap>(props: { at: At; input: SlotMap[At]; fallback?: JSX.Element }) {
+export function PluginSlot<At extends keyof BuiltinSlotMap>(props: {
+  at: At
+  input: BuiltinSlotMap[At]
+  fallback?: JSX.Element
+}) {
   const host = usePluginHost()
 
   const items = createMemo(() =>
     host
-      .items(Slot)
+      .items(BuiltinSlot)
       .filter((item) => item.value.at === props.at)
       .toSorted((a, b) => (a.value.order ?? 0) - (b.value.order ?? 0)),
   )
@@ -49,7 +54,7 @@ export function PluginSlot<At extends keyof SlotMap>(props: { at: At; input: Slo
         <Contribution plugin={item.plugin}>
           {() =>
             // SAFETY: items are filtered to `at === props.at`, and a slot's render takes that slot's input.
-            (item.value.render as (input: SlotMap[At]) => JSX.Element)(props.input)
+            (item.value.render as (input: BuiltinSlotMap[At]) => JSX.Element)(props.input)
           }
         </Contribution>
       )}
