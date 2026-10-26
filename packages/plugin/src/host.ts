@@ -2,6 +2,7 @@ export * as Host from "./host.js"
 
 import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
+import { Option, Schema } from "effect"
 import { importModule, resolveModule } from "@opencode/util/runtime-import"
 
 export interface Target {
@@ -77,8 +78,15 @@ export function packageID(target: Target) {
   return typeof name === "string" && name ? name : path.basename(target.directory)
 }
 
-function packageManifest(directory: string): { readonly name?: unknown; readonly exports?: unknown } | undefined {
+// The fields resolution reads from a local directory's package.json.
+const Manifest = Schema.fromJsonString(
+  Schema.Struct({ name: Schema.optional(Schema.Unknown), exports: Schema.optional(Schema.Unknown) }),
+)
+
+// A package.json that is not a JSON object counts as missing, so one broken plugin directory never stops the rest
+// from resolving: it falls back to the conventional root file names.
+function packageManifest(directory: string) {
   const file = path.join(directory, "package.json")
   if (!existsSync(file)) return undefined
-  return JSON.parse(readFileSync(file, "utf8"))
+  return Option.getOrUndefined(Schema.decodeUnknownOption(Manifest)(readFileSync(file, "utf8")))
 }

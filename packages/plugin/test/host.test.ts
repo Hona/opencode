@@ -207,6 +207,17 @@ describe("Host.resolve", () => {
     assert.equal(Host.packageID(published.target), name)
   })
 
+  it("treats a package.json that does not parse as missing, so resolution falls back to root files", async () => {
+    await using plugin = await fixture({ "package.json": '{ "name": "bad", ', "index.ts": source })
+    assert.deepEqual(Host.resolve(plugin.target), {
+      server: plugin.url("index.ts"),
+      tui: undefined,
+      rpc: undefined,
+      gui: undefined,
+    })
+    assert.equal(Host.packageID(plugin.target), path.basename(plugin.target.directory))
+  })
+
   it("resolves the conventional GUI entrypoint in a local directory", async () => {
     await using plugin = await fixture({ "index.ts": source, "gui-experimental.js": source })
     assert.deepEqual(Host.resolve(plugin.target), {
