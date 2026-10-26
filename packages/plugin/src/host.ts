@@ -1,5 +1,6 @@
 export * as Host from "./host.js"
 
+import { existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { importModule, resolveModule } from "@opencode/util/runtime-import"
 
@@ -12,9 +13,20 @@ export interface Entrypoints {
   readonly server?: string
   readonly tui?: string
   readonly rpc?: string
+  /**
+   * The prebuilt CommonJS GUI bundle (`./gui-experimental`, or `gui-experimental.cjs` or `gui-experimental.js` in a
+   * local directory without `exports`). Each desktop app window runs its default export; the desktop app's main
+   * process runs its `main` export.
+   */
+  readonly gui?: string
 }
 
-export function resolve(target: Target): Entrypoints {
+export function resolve(input: Target): Entrypoints {
+  // A local directory whose package.json names the package and maps `exports` resolves through them, like the
+  // published package; without them it uses the conventional file names at its root.
+  const manifest = input.name ? undefined : packageManifest(input.directory)
+  const target =
+    typeof manifest?.name === "string" && manifest.exports !== undefined ? { ...input, name: manifest.name } : input
   const entry = (subpaths: readonly string[]) => {
     for (const subpath of subpaths) {
       const specifier = target.name
@@ -40,9 +52,33 @@ export function resolve(target: Target): Entrypoints {
     }
     return undefined
   }
-  return { server: entry(["server", ""]), tui: entry(["tui"]), rpc: entry(["rpc"]) }
+  return {
+    server: entry(["server", ""]),
+    tui: entry(["tui"]),
+    rpc: entry(["rpc"]),
+    // The app evaluates the bundle as CommonJS text, so a TypeScript source or an ES module is never a GUI entry.
+    gui: [target.name ? entry(["gui-experimental"]) : entry(["gui-experimental.cjs", "gui-experimental.js"])].find(
+      (file) => file && /\.c?js$/.test(file),
+    ),
+  }
 }
 
 export function load(entrypoint: string): Promise<unknown> {
   return importModule(entrypoint)
+}
+
+/**
+ * The id of a plugin without a server part: its package name, or a local directory's name when it has no
+ * package.json name. A server part names its plugin in `Plugin.define` instead.
+ */
+export function packageID(target: Target) {
+  if (target.name) return target.name
+  const name = packageManifest(target.directory)?.name
+  return typeof name === "string" && name ? name : path.basename(target.directory)
+}
+
+function packageManifest(directory: string): { readonly name?: unknown; readonly exports?: unknown } | undefined {
+  const file = path.join(directory, "package.json")
+  if (!existsSync(file)) return undefined
+  return JSON.parse(readFileSync(file, "utf8"))
 }

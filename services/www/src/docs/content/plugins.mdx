@@ -33,7 +33,8 @@ Relative paths resolve from the config file containing the entry.
 Configured local paths must be directories. OpenCode loads the directory's `server` or `index` module, such as
 `index.ts`. A path to a single file is skipped.
 
-Plugin arrays from applicable config files are applied from lowest to highest precedence instead of replacing one another.
+Plugin arrays from applicable config files are applied from lowest to highest precedence instead of replacing one
+another.
 
 ```text
 ~/.config/opencode/opencode.jsonc
@@ -100,7 +101,8 @@ opencode plugin remove opencode-acme-plugin@1.2.0
 ```
 
 `plugin check` checks server and TUI-only package plugins for updates. `plugin update` updates every outdated package;
-pass a configured package target to check or update only that package. Local plugins and exact package revisions are skipped.
+pass a configured package target to check or update only that package. Local plugins and exact package revisions are
+skipped.
 
 Package installation accepts npm names with versions, tags, or ranges, plus npm-compatible Git package specifications.
 Git repositories can use hosted shortcuts, HTTPS, or SSH, including private repositories available through your existing
@@ -120,13 +122,51 @@ local paths directly; tarball and npm alias targets are not accepted by `plugin 
 
 Changes under watched config directories reload automatically. Server startup loads cached package plugins immediately,
 installs missing packages in the background, and checks unpinned npm and Git plugins for updates without changing the
-installed package. Exact npm versions and full Git commit hashes stay pinned. Changes to unwatched local dependencies may
-still require restarting OpenCode.
+installed package. Exact npm versions and full Git commit hashes stay pinned. Changes to unwatched local dependencies
+may still require restarting OpenCode.
 
 ```sh
 touch .opencode/plugins/concise/index.ts
 opencode service restart
 ```
+
+## Desktop
+
+A plugin that exports `./gui-experimental` also adds panels, commands, or settings to OpenCode Desktop. The app loads
+plugins from the server it runs, so configure the plugin in your global `opencode.json(c)` to use it in every window.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+**Settings > Plugins** lists the plugins that run in the app. A plugin's switch turns off its desktop UI in every
+window, and **Reload** loads it again, for example after a failure.
+
+```text
+acme      Server TUI   Reload  [on]
+```
+
+- The switch leaves the plugin's other parts running. Its row tags them: **Server**, and **TUI** when the plugin
+  exports `./tui`.
+- To turn off the whole plugin, add `"-acme"` after its entry in `plugins` in your global `opencode.json(c)`. Its
+  desktop UI and TUI part turn off too, because both load only for plugins the server runs, unless `cli.json` loads
+  the TUI part directly.
+- To turn off only the TUI part, add `-` and the TUI plugin's id to `plugins` in [`cli.json`](/cli/plugins).
+- The app's own plugins carry a **Built-in** label and always run.
+
+A row also shows a status while its plugin is not running normally:
+
+```text
+acme      Server   Failed   Reload  [on]
+```
+
+- **Loading:** the plugin is loading, or waiting for its stored state.
+- **Failed:** the plugin failed to load, or its setup threw an error. The error shows below the row.
+
+A plugin whose desktop UI does not support your operating system keeps its row, without a switch, with the note "Not
+available on this system."
 
 ## Terminal
 
@@ -138,6 +178,11 @@ CLI-only plugins are configured separately and remain active when connected to a
 }
 ```
 
-<Card title="Build a plugin" href="/build/plugins">
-  Create plugins that add tools, hooks, integrations, commands, agents, and other behavior.
-</Card>
+<CardGroup cols={2}>
+  <Card title="Build a plugin" href="/build/plugins">
+    Create plugins that add tools, hooks, integrations, commands, agents, and other behavior.
+  </Card>
+  <Card title="Build a GUI plugin" href="/build/plugins/gui">
+    Add panels, commands, settings pages, and main-process integrations to OpenCode Desktop.
+  </Card>
+</CardGroup>

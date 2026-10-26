@@ -164,11 +164,13 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
       const entrypoints: Host.Entrypoints = directory
         ? yield* Effect.sync(() => Host.resolve({ directory: operation.target }))
         : { server: pathToFileURL(operation.target).href }
-      if (!entrypoints.server) return []
+      // A directory without a server part still carries its TUI or GUI part.
+      const entrypoint = entrypoints.server ?? entrypoints.tui ?? entrypoints.gui
+      if (!entrypoint) return []
       if (directory) {
         const root = yield* fs.resolve(operation.target)
-        const server = yield* fs.resolve(fileURLToPath(entrypoints.server))
-        if (!FSUtil.contains(root, server)) return []
+        const resolved = yield* fs.resolve(fileURLToPath(entrypoint))
+        if (!FSUtil.contains(root, resolved)) return []
       }
       const times = yield* Effect.forEach(
         [
