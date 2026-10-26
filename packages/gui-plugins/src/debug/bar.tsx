@@ -274,7 +274,7 @@ export default function DebugBar(props: {
   }
 
   const longv = () => (state.long.count === undefined ? na() : `${time(state.long.block) ?? na()}/${state.long.count}`)
-  const navv = () => (state.nav.pending ? "ΓÇª" : (time(state.nav.dur) ?? na()))
+  const navv = () => (state.nav.pending ? "…" : (time(state.nav.dur) ?? na()))
 
   const toggleFocus = async () => {
     if (!desktop) return
@@ -761,7 +761,7 @@ export default function DebugBar(props: {
               inline={props.inline}
               label={ctx.t("speed.label")}
               tip={ctx.t("speed.tip")}
-              value={`${globals().speed.toFixed(2)}├ù`}
+              value={`${globals().speed.toFixed(2)}×`}
               onClick={() => motionTuning.set(motionGlobals.speed, nextSpeed(globals().speed))}
             />
             <ToggleCell

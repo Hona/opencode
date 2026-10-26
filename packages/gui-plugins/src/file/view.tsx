@@ -523,7 +523,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
           )}
         </Match>
         <Match when={current()?.loading}>
-          <div class="px-6 py-4 text-text-weak">{ctx.t("common.loading")}ΓÇª</div>
+          <div class="px-6 py-4 text-text-weak">{ctx.t("common.loading")}…</div>
         </Match>
         <Match when={current()?.notFound ? current()?.name : undefined}>
           {(name) => <div class="px-6 py-4 text-text-weak">{ctx.t("tab.notFound", { name: name() })}</div>}

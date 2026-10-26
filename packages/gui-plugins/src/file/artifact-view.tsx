@@ -112,7 +112,7 @@ export default function ArtifactView(props: {
     const info: ArtifactInfo = parsed ? { rows: parsed.total, columns: parsed.columns } : state().info
 
     return [
-      info.width && info.height ? `${info.width} ├ù ${info.height}` : undefined,
+      info.width && info.height ? `${info.width} × ${info.height}` : undefined,
       info.duration ? formatDuration(info.duration) : undefined,
       info.rows !== undefined ? ctx.plural("view.table.rows", Math.max(0, info.rows - 1)) : undefined,
       info.columns !== undefined ? ctx.plural("view.table.columns", info.columns) : undefined,
@@ -250,7 +250,7 @@ function ArtifactToolbar(props: {
               <>
                 <Show when={index() > 0}>
                   <span aria-hidden class="text-text-faint">
-                    ┬╖
+                    ·
                   </span>
                 </Show>
                 <span class="truncate tabular-nums">{item}</span>
