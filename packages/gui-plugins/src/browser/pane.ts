@@ -156,7 +156,7 @@ export function createBrowserPane(input: {
             const session = yield* client.session.get({ sessionID })
 
             // The agent can already read this workspace, so showing its files adds no access.
-            if (server.local) entry.fileRoots = [session.location.directory]
+            if (server.sameMachine) entry.fileRoots = [session.location.directory]
 
             const options = {
               location: { directory: session.location.directory, workspace: session.location.workspaceID },

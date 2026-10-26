@@ -292,7 +292,7 @@ export function createHost(input: {
       if (!sidecar) return undefined
       const authorization = SidecarCredentials.authorization(sidecar, sidecar.url)
 
-      return { id, url: sidecar.url, headers: authorization ? { authorization } : {}, local: true }
+      return { id, url: sidecar.url, headers: authorization ? { authorization } : {}, sameMachine: true }
     }
 
     const endpoint = [...input.servers]
@@ -315,7 +315,7 @@ export function createHost(input: {
       id,
       url: endpoint.url,
       headers: authorization ? { authorization } : {},
-      local: !!sidecar && URL.canParse(endpoint.url) && new URL(endpoint.url).origin === sidecar.url,
+      sameMachine: !!sidecar && URL.canParse(endpoint.url) && new URL(endpoint.url).origin === sidecar.url,
       username: endpoint.username,
       password: endpoint.password,
     }

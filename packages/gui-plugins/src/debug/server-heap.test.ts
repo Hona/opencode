@@ -32,7 +32,7 @@ test("asks the server to write into the folder, and records where an older serve
     },
   })
 
-  const endpoint = { id: "sidecar", url: server.url.href, headers: { authorization: "Basic secret" }, local: true }
+  const endpoint = { id: "sidecar", url: server.url.href, headers: { authorization: "Basic secret" }, sameMachine: true }
   const current = await captureServer(endpoint, directory, AbortSignal.timeout(10_000))
   const old = await captureServer(endpoint, directory, AbortSignal.timeout(10_000))
 
@@ -48,7 +48,7 @@ test("asks the server to write into the folder, and records where an older serve
 
 test("records why the server has no snapshot", async () => {
   using server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(null, { status: 404 }) })
-  const endpoint = { id: "sidecar", url: server.url.href, headers: {}, local: true }
+  const endpoint = { id: "sidecar", url: server.url.href, headers: {}, sameMachine: true }
 
   expect([
     await captureServer(undefined, os.tmpdir(), AbortSignal.timeout(10_000)),

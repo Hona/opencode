@@ -116,8 +116,8 @@ export interface ServerEndpoint {
   readonly url: string
   /** Headers to send, with the `authorization` the server needs. */
   readonly headers: Readonly<Record<string, string>>
-  /** Same machine as this app's own server. Loopback HTTP alone does not qualify. */
-  readonly local: boolean
+  /** The server runs on the same machine as this app's own server. Loopback HTTP alone does not qualify. */
+  readonly sameMachine: boolean
   /** Credentials a window configured for the server; `headers` already carries them. None for the app's own server. */
   readonly username?: string
   /** The configured password; `headers` already carries it. */
