@@ -624,13 +624,14 @@ story(
 )
 
 story(
-  "a plugin follows another's contract across load, reload and disable, and provides only its own",
+  "a plugin follows another's contract across load, reload and disable, provides only its own, and a failed one stays failed",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
       const { mountPlugins, until, Contract } = await import(fixture)
       const Tree: Contract<{ version: number }, "provider.tree"> = Contract.define("provider.tree")
       const providerLoad = Promise.withResolvers<void>()
       const versions = { value: 0 }
+      const thiefLoads = { value: 0 }
       const observed = { read: (): Live<{ version: number }> => ({ status: "pending" }) }
 
       const host = mountPlugins({
@@ -650,7 +651,11 @@ story(
           // Another plugin cannot provide the provider's contract: its setup fails, and the contract stays the provider's.
           {
             id: "thief",
-            windowEntry: async () => ({ default: (ctx: Context) => void ctx.provide(Tree, { version: 0 }) }),
+            windowEntry: async () => {
+              thiefLoads.value++
+
+              return { default: (ctx: Context) => void ctx.provide(Tree, { version: 0 }) }
+            },
           },
         ],
       })
@@ -676,6 +681,8 @@ story(
         second,
         disabled: observed.read(),
         thief: host.failure("thief")?.error.includes('provides only its own contracts, not "provider.tree"'),
+        // Disabling another plugin does not retry the failed one; only Reload or a new revision does.
+        thiefLoads: thiefLoads.value,
       }
 
       host.unmount()
@@ -689,6 +696,7 @@ story(
       second: { status: "active", value: { version: 2 }, generation: 2 },
       disabled: { status: "inactive", reason: "disabled" },
       thief: true,
+      thiefLoads: 1,
     })
   },
 )

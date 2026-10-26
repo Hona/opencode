@@ -900,7 +900,10 @@ function createHost(input: HostInput) {
         definitions
           .filter((definition) => !disabled.has(definition.id))
           .forEach((definition) => {
-            if (instances.has(definition.id) || state.status[definition.id] === "loading") return
+            // A failed plugin waits for Reload or a new revision, as in main.
+            if (instances.has(definition.id)) return
+
+            if (state.status[definition.id] === "loading" || state.status[definition.id] === "failed") return
 
             void activate(latest(definition))
           })
