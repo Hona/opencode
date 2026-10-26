@@ -141,40 +141,8 @@ plugins from the server it runs, so configure the plugin in your global `opencod
 }
 ```
 
-**Settings > Plugins** lists the plugins that run in the app. A plugin's switch turns off its desktop UI in every
-window, and **Reload** loads it again, for example after a failure.
-
-```text
-acme      Server TUI   Reload  [on]
-```
-
-- The switch leaves the plugin's other parts running. Its row tags them: **Server**, and **TUI** when the plugin
-  exports `./tui`.
-- To turn off the whole plugin, add `"-acme"` after its entry in `plugins` in your global `opencode.json(c)`. Its
-  desktop UI and TUI part turn off too, because both load only for plugins the server runs, unless `cli.json` loads
-  the TUI part directly.
-- To turn off only the TUI part, add `-` and the TUI plugin's id to `plugins` in [`cli.json`](/cli/plugins).
-- The app's own plugins carry a **Built-in** label and always run.
-
-A row also shows a status while its plugin is not running normally:
-
-```text
-acme      Server   Failed   Reload  [on]
-```
-
-- **Loading:** the plugin is loading, or waiting for its stored state.
-- **Failed:** the plugin failed to load, or its setup threw an error. The error shows below the row.
-
-Some rows have no switch and no **Reload**, and say why the desktop UI does not run:
-
-```text
-acme      Not available on this system.
-```
-
-- **Not available on this system:** the plugin's desktop UI does not support your operating system.
-- **Not loaded. A built-in plugin already uses this ID:** the plugin's ID is reserved by one of the app's own plugins.
-- An error message: the app could not read the plugin's desktop UI from its server. It tries again when the server's
-  plugins change.
+**Settings > Plugins** lists them. A plugin's switch turns off only its desktop UI, and **Reload** loads it again
+after a failure. To turn off the whole plugin, add `"-acme"` to `plugins`.
 
 ## Terminal
 
@@ -186,11 +154,6 @@ CLI-only plugins are configured separately and remain active when connected to a
 }
 ```
 
-<CardGroup cols={2}>
-  <Card title="Build a plugin" href="/build/plugins">
-    Create plugins that add tools, hooks, integrations, commands, agents, and other behavior.
-  </Card>
-  <Card title="Build a GUI plugin" href="/build/plugins/gui">
-    Add panels, commands, settings pages, and main-process integrations to OpenCode Desktop.
-  </Card>
-</CardGroup>
+<Card title="Build a plugin" href="/build/plugins">
+  Create plugins that add tools, hooks, integrations, commands, agents, and other behavior.
+</Card>
