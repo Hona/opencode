@@ -14,6 +14,8 @@ export const keybindRenames = {
   "server.ssh.add": "ssh.add",
   "debugBar.toggle": "debug.toggle",
   "session.btw": "btw.ask",
+  // The details plugin's earlier id, then the command before plugins.
+  "summary.toggle": "details.toggle",
   "session.summary.toggle": "details.toggle",
 } satisfies Readonly<Record<string, string>>
 

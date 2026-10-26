@@ -71,6 +71,11 @@ test.each([
     expected: { version: "2.0.20" },
   },
   {
+    name: "keybind summary.toggle, the details plugin's earlier id → details.toggle",
+    home: () => renamed([["summary.toggle", "f7"]]),
+    expected: { "details.toggle": "f7" },
+  },
+  {
     name: "keybind session.summary.toggle, from before plugins → details.toggle",
     home: () => renamed([["session.summary.toggle", "f8"]]),
     expected: { "details.toggle": "f8" },
