@@ -260,7 +260,6 @@ export function createHostApis() {
       platform.platform === "desktop"
         ? {
             os: platform.os ?? "linux",
-            window: platform.windowID,
             zoom: () => platform.webviewZoom?.() ?? 1,
             launch: (path, app) => platform.openPath?.(path, app) ?? Promise.resolve(),
             reveal: (path) => platform.revealPath?.(path) ?? Promise.resolve(false),

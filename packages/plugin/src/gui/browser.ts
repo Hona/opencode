@@ -1,4 +1,5 @@
-import { Contract, type SessionRef } from "./index.js"
+import { Contract } from "./core.js"
+import type { SessionRef } from "./host-apis.js"
 
 /** What the built-in browser offers other plugins: a session's desktop browser pane. Read it with `ctx.use(Browser)`. */
 export interface Browser {

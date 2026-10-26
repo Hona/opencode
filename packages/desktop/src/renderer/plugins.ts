@@ -32,9 +32,11 @@ export function createPluginBridge(): Bridge {
     ]
 
     const revision = menubar.revision
-    void invoke("PluginMenubarItems").then((items) => {
-      if (attached.stop && menubar.revision === revision) dispatch({ type: "menubarItems", items })
-    })
+    void invoke("PluginMenubarItems")
+      .then((items) => {
+        if (attached.stop && menubar.revision === revision) dispatch({ type: "menubarItems", items })
+      })
+      .catch((cause: unknown) => console.error("[plugin] menubar items failed", cause))
 
     return () => stops.forEach((stop) => stop())
   }

@@ -31,7 +31,7 @@ test("a list main pushes while the initial list is pending wins over the older r
     },
   }
 
-  const plugin = { id: "fixture", name: "Fixture", version: "1.0.0", builtin: true }
+  const plugin = { id: "fixture", builtin: false }
   const root = createRoot((dispose) => ({ installed: createInstalled(bridge), dispose }))
   // Another window disabled the plugin before this window's initial list arrived.
   listeners.forEach((listener) => listener({ type: "installed", list: [{ ...plugin, enabled: false }] }))

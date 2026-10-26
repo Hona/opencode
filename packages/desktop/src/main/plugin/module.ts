@@ -6,7 +6,6 @@ import {
   type pluginSharedModules,
 } from "@opencode/plugin/gui/host"
 import type { Plugin } from "@opencode/plugin/gui/main"
-import { PluginError } from "./error"
 
 const native = createRequire(import.meta.url)
 
@@ -45,7 +44,7 @@ export async function evaluateMain(code: string) {
 
       if (windowOnly.has(name)) return inertModule(name)
 
-      throw new PluginError("invalidModule", { message: name })
+      throw new Error(`Plugin GUI bundle requires a module the app does not share: ${name}`)
     },
   })
 

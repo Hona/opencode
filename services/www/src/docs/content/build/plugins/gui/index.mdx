@@ -205,13 +205,14 @@ only it holds, and sends windows the same set. A window cannot supply main-proce
 
 ## Reload and updates
 
-Load the plugin from its local directory, which resolves `./gui-experimental` through its `package.json` `exports`, and
-rebuild on every change:
+Load the plugin from its local directory and rebuild on every change:
 
 ```bash
 vite build --watch
 ```
 
+- A local directory whose `package.json` has a `name` and `exports` resolves `./gui-experimental` through them. Without
+  them, it loads `gui-experimental.cjs` (or `.js`) at its root.
 - Each rebuild reloads the plugin's GUI in every window and in the main process. The server entry does not restart.
 - An installed package's GUI changes only with its version.
 - Changing the plugin's `options` in `opencode.json(c)` reloads the plugin.
@@ -935,8 +936,8 @@ ctx.add(Slot, {
 - `session.panel.end` holds actions at the trailing end of the side region's tab strip.
 - `order` sorts the items in one slot.
 
-`session.location.menu` receives `shown`, which is `true` while the project menu is open. Subscribe to location data only
-while it is `true`:
+`session.location.menu` receives `shown`, which is `true` while the project menu is open. Subscribe to location data
+only while it is `true`:
 
 ```tsx
 ctx.add(Slot, {
@@ -1765,7 +1766,6 @@ interface System {
 
 interface Desktop {
   os: "macos" | "windows" | "linux"
-  window: string
   zoom(): number
   launch(path: string, app?: string): Promise<void>
   reveal(path: string): Promise<boolean>
@@ -1820,13 +1820,13 @@ ctx.stores.prefs.update((draft) => {
 ```
 
 - `ready()` is `true` once the value has loaded. Writes made before then wait and apply in call order.
-- `from` names other stored keys to import the value from once, while the store holds none, for example
-  `"acme.settings"`. Pass a list to try several keys, newest first. The other key keeps its copy until the store is
-  removed.
+- `from` names other stored keys to import the value from once, while the store holds none, such as the key of a
+  store you renamed: `"plugin.acme.settings"`. Pass a list to try several keys, newest first. The other key keeps its
+  copy until the store is removed.
 
 ```ts
 stores: {
-  prefs: Store.global(Prefs, { enabled: true }, ["acme.settings.v2", "acme.settings"]),
+  prefs: Store.global(Prefs, { enabled: true }, ["plugin.acme.settings.v2", "plugin.acme.settings"]),
 }
 ```
 

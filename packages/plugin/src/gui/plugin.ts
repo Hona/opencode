@@ -6,35 +6,39 @@ import type { MainContext } from "./main.js"
 export type { Cleanup, Declarations }
 
 /**
- * A window entry. `Plugin.Setup<typeof definition>` types `ctx.stores` from the definition's declared stores. Runs
- * synchronously under the plugin's Solid owner; return nothing, or a cleanup that runs when the plugin goes away. Put
- * async work in `createKeyed` or `createLatest`, and pass `ctx.signal` or a signal derived from it. The return type
- * rejects async functions and replacement values; the host also rejects thenables from JavaScript entries.
+ * A window setup: the `setup` of `Plugin.define`. `Plugin.Setup<typeof definition>` types one written apart from
+ * its declarations, with `ctx.stores` from the declared stores. Runs synchronously under the plugin's Solid owner;
+ * return nothing, or a cleanup that runs when the plugin goes away. Put async work in `createKeyed` or
+ * `createLatest`, and pass `ctx.signal` or a signal derived from it. The return type rejects async functions and
+ * replacement values; the host also rejects thenables from JavaScript bundles.
  *
  * @param ctx - The plugin's context, under its Solid owner.
  *
  * @example
  * ```ts
- * const setup: Plugin.Setup<typeof definition> = (ctx) => {
- *   ctx.add(Command, () => ({ id: "settings", title: ctx.t("settings"), run: () => ctx.layout.settings(ctx.id) }))
- * }
- * export default setup
+ * export default Plugin.define({
+ *   setup(ctx) {
+ *     ctx.add(Command, () => ({ id: "settings", title: ctx.t("settings"), run: () => ctx.layout.settings(ctx.id) }))
+ *   },
+ * })
  * ```
  */
 export type Setup<D extends Declarations = Declarations<{}>> = (ctx: SetupContext<D>) => Cleanup | void
 
 /**
- * A main-process entry. It may be async; return nothing, or a cleanup that runs when the plugin goes away.
+ * A main-process setup: the `main` of `Plugin.define`. It may be async; return nothing, or a cleanup that runs when
+ * the plugin goes away.
  *
  * @param ctx - The plugin's main-process context.
  *
  * @example
  * ```ts
- * const setup: Plugin.MainSetup = (ctx) => {
- *   const awake = ctx.storage.store("awake", { schema: Schema.Boolean, initial: false })
- *   ctx.provide(KeepAwake, { get: () => awake.value, set: (enabled) => awake.set(enabled) })
- * }
- * export default setup
+ * export default Plugin.define({
+ *   main(ctx) {
+ *     const awake = ctx.storage.store("awake", { schema: Schema.Boolean, initial: false })
+ *     ctx.provide(KeepAwake, { get: () => awake.value, set: (enabled) => awake.set(enabled) })
+ *   },
+ * })
  * ```
  */
 export type MainSetup = (ctx: MainContext) => Cleanup | void | Promise<Cleanup | void>

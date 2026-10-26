@@ -19,7 +19,7 @@ export const pluginHandlers = PluginRpcs.toLayer(
       const win = BrowserWindow.fromWebContents(contents)
 
       if (!win || win.isDestroyed() || win.webContents !== contents || !isRendererUrl(contents.getURL()))
-        throw new Error("extension.caller.invalid")
+        throw new Error("plugin.caller.invalid")
 
       return win.id
     }

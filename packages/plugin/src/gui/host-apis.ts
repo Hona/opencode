@@ -890,8 +890,8 @@ export interface StoreOptions<S extends Schema.ConstraintCodec<object, unknown>>
   /** Where the value lives. Defaults to `"global"`. */
   readonly scope?: StorageScope
   /**
-   * Imports an older key of the same storage once (the raw stored key, e.g. `"acme.recent"`), or the first of several
-   * that holds a value. See `StoreFrom`.
+   * Imports an older key of the same storage once (the raw stored key, e.g. `"plugin.acme.recent"`), or the first of
+   * several that holds a value. See `StoreFrom`.
    */
   readonly from?: StoreFrom | readonly StoreFrom[]
 }
@@ -977,8 +977,6 @@ export interface System {
 export interface Desktop {
   /** The operating system. */
   readonly os: OS
-  /** This window's id. */
-  readonly window: string
   /** The window's zoom factor; 1 is 100%. */
   zoom(): number
   /**

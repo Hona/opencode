@@ -830,7 +830,7 @@ story("a contract component reads its provider context and preserves reactive pr
   expect(result).toEqual({ context: "provider", mounts: 1, before: "before", after: "after" })
 })
 
-story("settings show where each part of a plugin from the config is turned off", async ({ page }, info) => {
+story("Settings > Plugins shows where each part of a plugin from the config is turned off", async ({ page }, info) => {
   await page.evaluate(async (fixture) => {
     const { mountPlugins, until } = await import(fixture)
 
@@ -993,13 +993,7 @@ story("startup enable state does not wait for the manager, and live updates beat
     const setups: string[] = []
 
     const list = (disabled: readonly string[]): Installed[] =>
-      ["enabled", "disabled"].map((id) => ({
-        id,
-        name: id,
-        version: "1",
-        builtin: true,
-        enabled: !disabled.includes(id),
-      }))
+      ["enabled", "disabled"].map((id) => ({ id, builtin: false, enabled: !disabled.includes(id) }))
 
     const bridge: Bridge = {
       packaged: false,

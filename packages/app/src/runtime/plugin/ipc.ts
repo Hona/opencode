@@ -98,16 +98,19 @@ export function createIpcClients(bridge: Bridge | undefined) {
 
     const before = { ...changesOf(token.id) }
 
-    void connected.subscribe(token.id).then((result) => {
-      const after = changesOf(token.id)
+    void connected
+      .subscribe(token.id)
+      .then((result) => {
+        const after = changesOf(token.id)
 
-      batch(() => {
-        if (after.available === before.available) setAvailable(token.id, result.available)
+        batch(() => {
+          if (after.available === before.available) setAvailable(token.id, result.available)
 
-        if (after.state === before.state && result.state !== undefined)
-          setState("values", token.id, decodeState(token.id, result.state))
+          if (after.state === before.state && result.state !== undefined)
+            setState("values", token.id, decodeState(token.id, result.state))
+        })
       })
-    })
+      .catch((cause: unknown) => console.error(`[plugin] ${token.id}`, cause))
   }
 
   const create = (connected: Bridge, token: Ipc): IpcClient<IpcSpec> => {

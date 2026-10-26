@@ -54,7 +54,7 @@ export function PluginRoot(props: ParentProps) {
 
   const localBuiltins = builtins.filter((definition) => runsOn(definition, os))
 
-  // The GUIs of the plugins on the app's own server, found once the app interface lists its servers.
+  // The GUIs of the plugins on the app's own server, as main sends them.
   const [plugins, setPlugins] = createSignal<readonly PluginGui[]>([])
   // Plugins whose GUI cannot load because a built-in claims the id, as main reports them; Settings > Plugins shows them.
   const [reserved, setReserved] = createSignal<readonly string[]>([])

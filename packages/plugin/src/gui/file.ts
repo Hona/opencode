@@ -1,7 +1,8 @@
 import type { Component, JSX } from "solid-js"
 import type { ArtifactKind } from "@opencode/util/artifact"
 import type { ChangeKind } from "./review.js"
-import { Contract, Registry, type MountedSession, type SessionScreen } from "./index.js"
+import { Contract, Registry } from "./core.js"
+import type { MountedSession, SessionScreen } from "./host-apis.js"
 
 /** What `FileTree.Tree` renders: a tree of only the allowed workspace files. */
 export interface FileTreeProps {

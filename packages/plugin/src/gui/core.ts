@@ -2,7 +2,8 @@ import type { OpenCodeClient } from "@opencode/client/promise"
 import type { Schema } from "effect"
 
 /**
- * Undoes a registration, or tears something down. Every `add`, `provide`, `on` and finalizer returns or takes one.
+ * Undoes a registration, or tears something down. Every `add` and `on` returns one, and so does a window's
+ * `provide`; `onCleanup` and a setup's return value take one.
  * Calling it early withdraws at once; a second call does nothing. When the host runs it, a throw or a rejection is
  * logged and the other cleanups still run; main's `Scope` waits for a returned promise until its deadline.
  */
@@ -354,6 +355,18 @@ export interface BaseContext {
    */
   readonly id: string
   /**
+   * Aborts when the plugin is disabled or reloaded, or when its process ends: the window closes, or the app quits.
+   * After an `await`, return if it aborted. A window has no owner after an `await`, so listen to the signal for
+   * teardown that starts there.
+   *
+   * @example
+   * ```ts
+   * const config = await load({ signal: ctx.signal })
+   * if (ctx.signal.aborted) return
+   * ```
+   */
+  readonly signal: AbortSignal
+  /**
    * Contributes an item that follows reactive state, such as the language: the window re-runs the function when what
    * it reads changes (main reads it on every `list`). Return undefined to withdraw the item until it returns one
    * again. The host withdraws it with the current owner (a `createKeyed` run or a component), else with the plugin;
@@ -428,13 +441,13 @@ export interface BaseContext {
 
 /**
  * An older home of a stored value, imported once into a store that has no value yet: a stored key of the same
- * storage, e.g. `"acme.settings"`. Where `from` takes a list, it names several older homes, newest first, and the
- * first that holds a value is imported, for example a plugin's earlier storage namespace and then the key that
- * namespace once replaced. The older home keeps its copy until the store is removed.
+ * storage, such as the key of a store the plugin renamed, e.g. `"plugin.acme.settings"`. Where `from` takes a list,
+ * it names several older homes, newest first, and the first that holds a value is imported. The older home keeps its
+ * copy until the store is removed.
  *
  * @example
  * ```ts
- * Store.global(Prefs, { expanded: true }, ["acme.settings.v2", "acme.settings"])
+ * Store.global(Prefs, { expanded: true }, ["plugin.acme.settings.v2", "plugin.acme.settings"])
  * ```
  */
 export type StoreFrom = string
@@ -471,7 +484,7 @@ export interface StoreDeclaration<
  * @example
  * ```ts
  * stores: {
- *   prefs: Store.global(Prefs, { shown: true }, "acme.settings"),
+ *   prefs: Store.global(Prefs, { shown: true }, "plugin.acme.settings"),
  *   view: Store.session(View, { open: [] }),
  * }
  * ```

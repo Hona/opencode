@@ -99,6 +99,8 @@ type Inventory = {
   tui: ReadonlySet<string>
   /** Plugins whose `os` leaves out this system: listed in Settings, never run. */
   unsupported: ReadonlySet<string>
+  /** New plugins whose bundle main could not read, with why: listed in Settings until a listing reads them. */
+  unreadable: ReadonlyMap<string, string>
   /** Aborts the current follow of the app's own server. */
   watch?: AbortController
   /** Stops following the server's connections. */
@@ -134,7 +136,7 @@ type Provider = {
 type HostApis = {
   -readonly [K in Exclude<
     keyof BuiltinMainContext,
-    keyof BaseContext | "signal" | "onCleanup" | "provide"
+    keyof BaseContext | "onCleanup" | "provide"
   >]?: BuiltinMainContext[K]
 }
 
@@ -184,8 +186,17 @@ export function createHost(input: {
   // Plugins on the app's own server that ship a `./gui-experimental` bundle, each at the bundle main last read and
   // runs. Main alone lists and reads them, from that server first-hand; windows load what main sends.
   const plugins = new Map<string, ListedPlugin>()
-  // The ids of plugins a built-in claims, and the follow of the app's own server.
-  const inventory: Inventory = { reserved: [], server: new Set(), tui: new Set(), unsupported: new Set() }
+
+  const inventory: Inventory = {
+    reserved: [],
+    server: new Set(),
+    tui: new Set(),
+    unsupported: new Set(),
+    unreadable: new Map(),
+  }
+
+  // The revision of each bundle that runs only on other systems, so a listing does not evaluate it again.
+  const skipped = new Map<string, string>()
   const entries = new Map<string, Contribution>()
   const ipcs = new Map<string, Provider>()
   // Each live instance's catalog and messages, so a locale change reaches them.
@@ -396,9 +407,11 @@ export function createHost(input: {
     inventory.watch?.abort()
     const watch = new AbortController()
     inventory.watch = watch
-    relistPlugins()
     void followPlugins(client, watch.signal)
   }
+
+  const follow = () =>
+    void watchPlugins().catch((cause: unknown) => input.log("plugin watch failed", { cause: String(cause) }))
 
   const followPlugins = async (client: OpenCodeClient, signal: AbortSignal) => {
     while (!signal.aborted) {
@@ -416,7 +429,7 @@ export function createHost(input: {
   }
 
   // Lists the plugins on the app's own server that ship a `./gui-experimental` bundle and reads each bundle there. A
-  // listing that fails keeps what main runs.
+  // listing that fails is logged and keeps what main runs.
   const listPlugins = async () => {
     sidecar.module ??= await loadClient()
     const client = sidecarClient()
@@ -425,7 +438,7 @@ export function createHost(input: {
 
     const listed = await client.plugin.list().then(
       (result) => result.data,
-      () => undefined,
+      (cause: unknown) => void input.log("plugin listing failed", { cause: String(cause) }),
     )
 
     if (!listed) return
@@ -437,40 +450,53 @@ export function createHost(input: {
       server: new Set(shipped.flatMap((plugin) => (plugin.features.server ? [plugin.id] : []))),
       tui: new Set(shipped.flatMap((plugin) => (plugin.features.tui ? [plugin.id] : []))),
       unsupported: new Set<string>(),
+      unreadable: new Map<string, string>(),
     }
 
     const read = await Promise.all(
-      shipped
-        .filter((plugin) => !reserved.includes(plugin.id))
-        .map((plugin) => readPlugin(client, plugin.id, parts.unsupported)),
+      shipped.filter((plugin) => !reserved.includes(plugin.id)).map((plugin) => readPlugin(client, plugin.id, parts)),
     )
 
     if (status.disposed) return
     applyPlugins(new Map(read.flatMap((entry) => (entry ? [entry] : []))), reserved, parts)
   }
 
-  // Reads a plugin's bundle and evaluates each new revision once. A read that fails keeps the bundle main runs, or
-  // leaves a new plugin out until the next change; a plugin limited to other systems is left out.
-  const readPlugin = async (client: OpenCodeClient, id: string, unsupported: Set<string>) => {
+  // Reads a plugin's bundle and evaluates each new revision once. A read that fails is logged and keeps the bundle
+  // main runs, or lists a new plugin with the failure until the next change; a plugin limited to other systems is left
+  // out.
+  const readPlugin = async (
+    client: OpenCodeClient,
+    id: string,
+    parts: { readonly unsupported: Set<string>; readonly unreadable: Map<string, string> },
+  ) => {
     const previous = plugins.get(id)
 
     const bundle = await client.plugin.gui({ id }).then(
       (result) => result.data,
-      () => undefined,
+      (cause: unknown) => {
+        input.log("plugin bundle read failed", { id, cause: String(cause) })
+
+        if (!previous) parts.unreadable.set(id, cause instanceof Error ? cause.message : String(cause))
+      },
     )
 
     if (!bundle) return previous && ([id, previous] as const)
 
     if (previous?.bundle.revision === bundle.revision) return [id, previous] as const
 
+    if (skipped.get(id) === bundle.revision) return void parts.unsupported.add(id)
+
+    if (status.disposed) return undefined
+
     const loaded = await evaluateMain(bundle.code).then(
       (value) => ({ ok: true as const, value }),
       (cause: unknown) => ({ ok: false as const, cause }),
     )
 
-    if (loaded.ok && !runsOn(loaded.value, os)) return void unsupported.add(id)
+    if (!loaded.ok || runsOn(loaded.value, os)) return [id, { bundle, loaded }] as const
+    skipped.set(id, bundle.revision)
 
-    return [id, { bundle, loaded }] as const
+    return void parts.unsupported.add(id)
   }
 
   // Starts, reloads and stops plugins' `main` setups to match a listing, and sends windows the new set: a new bundle
@@ -478,7 +504,7 @@ export function createHost(input: {
   const applyPlugins = (
     next: ReadonlyMap<string, ListedPlugin>,
     reserved: readonly string[],
-    parts: Pick<Inventory, "server" | "tui" | "unsupported">,
+    parts: Pick<Inventory, "server" | "tui" | "unsupported" | "unreadable">,
   ) => {
     const removed = [...plugins.keys()].filter((id) => !next.has(id))
 
@@ -496,7 +522,8 @@ export function createHost(input: {
       reserved.join("\n") === inventory.reserved.join("\n") &&
       [...parts.server].join("\n") === [...inventory.server].join("\n") &&
       [...parts.tui].join("\n") === [...inventory.tui].join("\n") &&
-      [...parts.unsupported].join("\n") === [...inventory.unsupported].join("\n")
+      [...parts.unsupported].join("\n") === [...inventory.unsupported].join("\n") &&
+      [...parts.unreadable].join("\n") === [...inventory.unreadable].join("\n")
     )
       return
     removed.forEach((id) => plugins.delete(id))
@@ -505,6 +532,7 @@ export function createHost(input: {
     inventory.server = parts.server
     inventory.tui = parts.tui
     inventory.unsupported = parts.unsupported
+    inventory.unreadable = parts.unreadable
     changed()
     broadcast(new PluginGuisChanged(pluginGuis()))
     removed.forEach((id) => void lifecycle.deactivate(id, () => lifecycle.forget(id)))
@@ -787,6 +815,15 @@ export function createHost(input: {
       tui: inventory.tui.has(id),
       unsupported: true,
     })),
+
+    ...[...inventory.unreadable].map(([id, error]) => ({
+      id,
+      builtin: false,
+      enabled: manager.enabled(id),
+      server: inventory.server.has(id),
+      tui: inventory.tui.has(id),
+      error,
+    })),
   ]
 
   const wire = (win: BrowserWindow) => {
@@ -840,8 +877,8 @@ export function createHost(input: {
      * its first window is up.
      */
     async start() {
-      inventory.stop ??= SidecarCredentials.onChange(() => void watchPlugins())
-      void watchPlugins()
+      inventory.stop ??= SidecarCredentials.onChange(follow)
+      follow()
       await Promise.all(local.map((definition) => lifecycle.activate(definition.id)))
     },
     /** Activates the plugin whose id the Ipc's id names, ahead of `start`. */
@@ -862,8 +899,12 @@ export function createHost(input: {
       const stateOf = provider.state
 
       if (!schema || !stateOf) return { available: true }
+      const encoded = Schema.encodeUnknownExit(schema)(stateOf(window))
 
-      return { available: true, state: Schema.encodeUnknownSync(schema)(stateOf(window)) }
+      if (Exit.isSuccess(encoded)) return { available: true, state: encoded.value }
+      input.log("plugin state encoding failed", { ipc, cause: String(encoded.cause) })
+
+      return { available: true }
     },
     async call(request: { readonly ipc: string; readonly method: string; readonly input?: unknown }, caller: Caller) {
       const provider = ipcs.get(request.ipc)
@@ -908,8 +949,6 @@ export function createHost(input: {
     async enable(id: string) {
       if (!known(id)) throw new PluginError("notFound")
 
-      if (definitions.some((definition) => definition.id === id)) throw new PluginError("builtin")
-
       manager.setEnabled(id, true)
       changed()
       await lifecycle.activate(id)
@@ -917,10 +956,10 @@ export function createHost(input: {
     async disable(id: string) {
       if (!known(id)) throw new PluginError("notFound")
 
-      if (definitions.some((definition) => definition.id === id)) throw new PluginError("builtin")
-
       manager.setEnabled(id, false)
       await lifecycle.deactivate(id)
+      // A plugin that is off shows no error from its last run.
+      lifecycle.forget(id)
       changed()
     },
     /**

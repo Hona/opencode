@@ -3,6 +3,7 @@ import { pluginEnabled } from "@opencode/plugin/gui/host"
 import { openDatabase } from "../storage/database"
 import { plugin } from "../storage/schema"
 import { readEnableState } from "./enable-state"
+import { PluginError } from "./error"
 import { createManager } from "./manager"
 
 test.each([
@@ -33,11 +34,19 @@ test.each([
   database.close()
 })
 
-test("both hosts run a built-in whatever setting is saved under its id", () => {
+test("both hosts run a built-in whatever setting is saved under its id, and main saves none for it", () => {
   const database = openDatabase(":memory:")
   const manager = createManager(database.db, ["current"])
-  manager.setEnabled("current", false)
+  database.db.insert(plugin).values({ id: "current", enabled: false }).run()
 
+  expect(() => manager.setEnabled("current", true)).toThrow(new PluginError("builtin"))
+  expect(
+    database.db
+      .select()
+      .from(plugin)
+      .all()
+      .map((row) => row.enabled),
+  ).toEqual([false])
   expect(manager.enabled("current")).toBe(true)
   expect(pluginEnabled({ id: "current", builtin: true }, readEnableState(database.db.$client))).toBe(true)
   database.close()

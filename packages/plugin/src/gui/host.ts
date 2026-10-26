@@ -571,9 +571,9 @@ export interface Bridge {
   /** The plugin manager. */
   readonly manager: {
     /**
-     * Explicit enable-state rows from the existing preload startup reply, including earlier ids. Undefined (or an
-     * omitted promise) means unknown: activation waits for `list()` or a live list, never assumes all are enabled.
-     * An empty list is authoritative: no saved settings. A rejected promise also falls back to the manager list.
+     * Explicit enable-state rows from the existing preload startup reply. Undefined (or an omitted promise) means
+     * unknown: activation waits for `list()` or a live list, never assumes all are enabled. An empty list is
+     * authoritative: no saved settings. A rejected promise also falls back to the manager list.
      */
     readonly initial?: Promise<readonly EnableState[] | undefined>
     /** The installed plugins, built-ins included. */

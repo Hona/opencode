@@ -337,7 +337,7 @@ The updater's actions branch on the state its main entry pushes and still answer
 const act = (name: "check" | "install") => {
   if (state()) return void import("./actions").then((module) => module[name](ctx, updater))
 
-  // Not loaded yet, or gone (turned off or failed): nothing can check or install.
+  // Not loaded yet, or not active (failed, or not on this platform): nothing can check or install.
   showToast({ title: ctx.t("common.requestFailed") })
 }
 ```

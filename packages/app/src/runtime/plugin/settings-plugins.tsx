@@ -29,6 +29,18 @@ export function PluginsSettings() {
 
   const enabled = (id: string) => itemOf(id)?.enabled ?? true
 
+  // Plugins main lists that this window does not load: limited to other systems, or a bundle main could not read.
+  const unloaded = () =>
+    installed
+      .list()
+      .filter(
+        (item) =>
+          item.unsupported ||
+          (!item.builtin &&
+            item.error !== undefined &&
+            !host.definitions().some((definition) => definition.id === item.id)),
+      )
+
   // Why the window entry or main's entry failed; either fails the plugin.
   const errorOf = (id: string) => host.state.failures[id]?.error ?? itemOf(id)?.error
 
@@ -124,7 +136,7 @@ export function PluginsSettings() {
                 </div>
               )}
             </For>
-            <For each={installed.list().filter((item) => item.unsupported)}>
+            <For each={unloaded()}>
               {(item) => (
                 <div class="settings-extension-row">
                   <div class="settings-extension-lead">
@@ -133,9 +145,14 @@ export function PluginsSettings() {
                       <bdi dir="ltr" class="settings-extension-name truncate">
                         {item.id}
                       </bdi>
-                      <span class="text-11-regular text-v2-text-text-muted">
-                        {language.t("settings.plugins.unsupported")}
-                      </span>
+                      <Show
+                        when={item.unsupported}
+                        fallback={<pre class="settings-server-dialog-error whitespace-pre-wrap">{item.error}</pre>}
+                      >
+                        <span class="text-11-regular text-v2-text-text-muted">
+                          {language.t("settings.plugins.unsupported")}
+                        </span>
+                      </Show>
                     </div>
                   </div>
                 </div>

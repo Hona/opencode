@@ -42,17 +42,6 @@ import type {
  */
 export interface Context extends BaseContext {
   /**
-   * Aborts when the plugin is disabled, reloaded, or the window closes. After an `await` there is no owner, so
-   * return if it aborted, and listen to it for teardown that starts after the await.
-   *
-   * @example
-   * ```ts
-   * const config = await load({ signal: ctx.signal })
-   * if (ctx.signal.aborted) return
-   * ```
-   */
-  readonly signal: AbortSignal
-  /**
    * Provides an in-process contract. Withdrawn with the current owner, else with the plugin. Throws for a contract
    * whose id is not your plugin's id or under it (`<id>.<name>`), and for an Ipc token: Ipcs are provided by the main
    * entry.

@@ -680,7 +680,7 @@ type RegionFixtureState = {
   strips: Record<string, { all: string[]; active?: string }>
   /** Each registration of a pane binding, with how many tabs it asked main to restore. */
   registrations: { binding: string; session: string; restore: number }[]
-  /** The pane's Ipc is gone, as while its main plugin reloads or is disabled. */
+  /** The pane's Ipc is gone, as while its main plugin reloads or is not active. */
   away: boolean
   /** Whether the fixture's shell session was closed by its fallback shortcut. */
   closed: boolean

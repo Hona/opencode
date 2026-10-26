@@ -144,7 +144,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (view) live.get(view.key)?.connection.wake()
   }
 
-  // The pane's Ipc goes away while its main plugin reloads or is disabled, taking every binding with it.
+  // The pane's Ipc goes away while its main plugin reloads or is not active, taking every binding with it.
   // Each attachment keeps its tabs and registers again once the Ipc is back. Created before the first attachment,
   // so its first run finds nothing to refresh or wake.
   createKeyed(

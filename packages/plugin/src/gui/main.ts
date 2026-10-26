@@ -65,7 +65,7 @@ export interface Embed {
 /** Places web pages (Electron WebContentsViews) in a window's layout. */
 export interface Embeds {
   /**
-   * The renderer presents it with the renderer SDK's `Embeds.View`; the host owns bounds, zoom, corners, and occlusion.
+   * A window shows it with the window SDK's `Embeds.View`; the host owns bounds, zoom, corners, and occlusion.
    * Created after the instance went away, it is disposed at once.
    *
    * @param view - The page's view.
@@ -173,16 +173,6 @@ export interface Log {
  * read. Every main plugin is one instance for the whole app, shared by all windows.
  */
 export interface MainContext extends BaseContext {
-  /**
-   * Aborts when the plugin is disabled, reloaded, or the app quits. After an `await`, return if it aborted.
-   *
-   * @example
-   * ```ts
-   * const info = await read({ signal: ctx.signal })
-   * if (ctx.signal.aborted) return
-   * ```
-   */
-  readonly signal: AbortSignal
   /**
    * Runs `fn` when the plugin goes away, last registered first; at once when it is already gone. A setup may also
    * return its cleanup.

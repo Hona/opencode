@@ -28,7 +28,7 @@ export function createStorage(
   id: string,
   builtin: boolean,
 ): BuiltinMainStorage {
-  const name = namespace(id)
+  const name = `plugin.${id}`
   // Every store opened on a key shares its entry, so a write through one is what the others read.
   const keys = new Map<string, Shared>()
 
@@ -43,7 +43,7 @@ export function createStorage(
   }
 
   const sources = (key: string, from: MainStoreFrom | readonly MainStoreFrom[] | undefined) =>
-    [...(builtin ? [{ state: [renamedNamespace(id), key] } as const] : []), ...[from ?? []].flat()].map((item) =>
+    [...(builtin ? [{ state: [`extension.${id}`, key] } as const] : []), ...[from ?? []].flat()].map((item) =>
       source(state, settings, item),
     )
 
@@ -135,15 +135,6 @@ export function createStorage(
     },
     remove: (key, options) => remove(key, options?.from),
   }
-}
-
-export function namespace(id: string) {
-  return `plugin.${id}`
-}
-
-/** The namespace a plugin's main stores had before plugins were renamed from extensions. */
-function renamedNamespace(id: string) {
-  return `extension.${id}`
 }
 
 /** One older home: a key of a settings file, or of another state namespace. */

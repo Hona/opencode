@@ -2,7 +2,7 @@ import { createMemo, createResource, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import type { Bridge, Installed } from "@opencode/plugin/gui/host"
 
-/** Saved enable preferences and manager metadata; activation and blocked-dependency status belong to the host. */
+/** Saved enable preferences and the plugins main lists; activation status belongs to the host. */
 export function createInstalled(bridge: Bridge | undefined) {
   const [state, setState] = createStore<{ list?: readonly Installed[] }>({})
   // A pushed list is newer than the initial reply, so a reply that arrives after one is dropped.
@@ -29,7 +29,8 @@ export function createInstalled(bridge: Bridge | undefined) {
     )
 
   return {
-    // Main lists a plugin only once a window reports it, so until then the preload rows hold its saved setting.
+    // Main lists a plugin only once it read it from the app's own server, so until then the preload rows hold its
+    // saved setting.
     enableState: createMemo(() => {
       const list = state.list
 

@@ -219,7 +219,7 @@ export function mountPlugins(input: {
   disabled?: readonly string[]
   bridge?: Parameters<typeof createInstalled>[0]
   stored?: Readonly<Record<string, Json>>
-  /** Shows the production developer settings page for status-label contracts. */
+  /** Shows the production Settings > Plugins page for status-label contracts. */
   settings?: boolean
   /** The client of an Ipc while main provides it, as a desktop window's bridge reports it. Omitted: the web. */
   ipc?: (token: Ipc) => IpcClient<IpcSpec> | undefined

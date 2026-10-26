@@ -76,7 +76,7 @@ type Instance = {
 export type PluginInput = { readonly options: PluginOptions; readonly client: () => OpenCodeClient | undefined }
 
 /** The APIs a window context exposes as properties. */
-type HostApis = Omit<BuiltinContext, keyof BaseContext | "signal" | "provide" | "use" | "main">
+type HostApis = Omit<BuiltinContext, keyof BaseContext | "provide" | "use" | "main">
 
 /**
  * Creates one HostApi for a plugin instance, on the instance's first read of it. `register` withdraws what it is
@@ -894,6 +894,8 @@ function createHost(input: HostInput) {
           .forEach((definition) => {
             deactivate(definition.id)
             setState("status", definition.id, "disabled")
+            // A plugin that is off shows no error from its last run.
+            setState("failures", definition.id, undefined)
           })
         definitions
           .filter((definition) => !disabled.has(definition.id))

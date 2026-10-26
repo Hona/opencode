@@ -165,8 +165,16 @@ acme      Server   Failed   Reload  [on]
 - **Loading:** the plugin is loading, or waiting for its stored state.
 - **Failed:** the plugin failed to load, or its setup threw an error. The error shows below the row.
 
-A plugin whose desktop UI does not support your operating system keeps its row, without a switch, with the note "Not
-available on this system."
+Some rows have no switch and no **Reload**, and say why the desktop UI does not run:
+
+```text
+acme      Not available on this system.
+```
+
+- **Not available on this system:** the plugin's desktop UI does not support your operating system.
+- **Not loaded. A built-in plugin already uses this ID:** the plugin's ID is reserved by one of the app's own plugins.
+- An error message: the app could not read the plugin's desktop UI from its server. It tries again when the server's
+  plugins change.
 
 ## Terminal
 
