@@ -16,6 +16,22 @@ afterEach(() =>
   Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }).catch(() => undefined))),
 )
 
+const states: StateStore[] = []
+
+// A state store queues writes behind a timer; closing it first writes them before its database goes away, so no flush
+// fires later against a closed database.
+const stateOf = (db: Database["db"]) => {
+  const state = createStateStore(db)
+  states.push(state)
+
+  return state
+}
+
+const close = (...databases: Database[]) => {
+  states.splice(0).forEach((state) => state.close())
+  databases.forEach((database) => database.close())
+}
+
 const directory = async () => {
   const root = await mkdtemp(path.join(tmpdir(), "opencode-plugin-storage-"))
   roots.push(root)
@@ -39,7 +55,7 @@ const settingsIn = (root: string): SettingsFiles => {
 }
 
 const open = (db: Database, settings: SettingsFiles) => {
-  const storage = createStorage(createStateStore(db), settings, "example", true)
+  const storage = createStorage(stateOf(db), settings, "example", true)
 
   return {
     storage,
@@ -133,8 +149,7 @@ describe("main plugin storage", () => {
       open: row.expected,
       ready: true,
     })
-    writer.close()
-    reader.close()
+    close(writer, reader)
   })
 
   test.each([7, null])("set persists the primitive %p immediately", async (next) => {
@@ -144,14 +159,13 @@ describe("main plugin storage", () => {
     const reader = openDatabase(file)
     const settings = settingsIn(root)
     const options = { schema: Schema.NullOr(Schema.Finite), initial: 0 }
-    const store = createStorage(createStateStore(writer.db), settings, "example", true).store("value", options)
+    const store = createStorage(stateOf(writer.db), settings, "example", true).store("value", options)
     store.set(next)
 
-    expect(createStorage(createStateStore(reader.db), settings, "example", true).store("value", options).value).toBe(
+    expect(createStorage(stateOf(reader.db), settings, "example", true).store("value", options).value).toBe(
       next,
     )
-    writer.close()
-    reader.close()
+    close(writer, reader)
   })
 
   // The built-ins moved their main state into declared stores: each older home imports into the same row, byte for
@@ -218,7 +232,7 @@ describe("main plugin storage", () => {
   ])("imports $name once, and remove forgets every home", async (input) => {
     const root = await directory()
     const database = openDatabase(path.join(root, "state.sqlite"))
-    const state = createStateStore(database.db)
+    const state = stateOf(database.db)
     const settings = settingsIn(root)
 
     input.seed.settings?.forEach((item) => settings(item.file).set(item.key, item.value))
@@ -235,14 +249,14 @@ describe("main plugin storage", () => {
     storage.remove("servers", { from: input.from })
 
     expect({ ...imported, left: homes(state, settings) }).toEqual({ value: [input.id], row: input.row, left: [] })
-    database.close()
+    close(database)
   })
 
   // Only built-ins stored values before the plugin rename; a plugin from the config that reuses the id never reads them.
   test("a plugin that is not a built-in never imports the namespace from before the plugin rename", async () => {
     const root = await directory()
     const database = openDatabase(path.join(root, "state.sqlite"))
-    const state = createStateStore(database.db)
+    const state = stateOf(database.db)
 
     state.set("extension.example", "servers", '["renamed"]')
 
@@ -252,7 +266,7 @@ describe("main plugin storage", () => {
     })
 
     expect({ value: store.value, row: state.get("plugin.example", "servers") }).toEqual({ value: [], row: null })
-    database.close()
+    close(database)
   })
 })
 
