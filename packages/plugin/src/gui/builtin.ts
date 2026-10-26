@@ -1,5 +1,5 @@
 // The parts of the SDK only the app's built-in plugins use, for workspace imports only: `tsconfig.build.json` leaves it
-// out of `dist`, and `script/publish.ts` exports it as `null`. Public SDK modules never import it.
+// out of `dist`, and `script/pack.ts` exports it as `null`. Public SDK modules never import it.
 
 import type { Schema } from "effect"
 import type { Context } from "./context.js"

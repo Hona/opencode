@@ -116,7 +116,10 @@ export interface ServerEndpoint {
   readonly url: string
   /** Headers to send, with the `authorization` the server needs. */
   readonly headers: Readonly<Record<string, string>>
-  /** The server runs on the same machine as this app's own server. Loopback HTTP alone does not qualify. */
+  /**
+   * The endpoint is this app's own server, so its paths are this machine's paths. Other servers on this machine, such
+   * as one in WSL or on another local port, report false.
+   */
   readonly sameMachine: boolean
   /** Credentials a window configured for the server; `headers` already carries them. None for the app's own server. */
   readonly username?: string
@@ -177,7 +180,7 @@ export interface MainContext extends BaseContext {
    * Runs `fn` when the plugin goes away, last registered first; at once when it is already gone. A setup may also
    * return its cleanup.
    *
-   * @param fn - The teardown; an async one delays quitting until it settles.
+   * @param fn - The teardown; an async one delays quitting until it settles, for at most 3 seconds.
    *
    * @example
    * ```ts

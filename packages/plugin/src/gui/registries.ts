@@ -630,7 +630,7 @@ export interface ComposerPillView {
  * alignment. The host does not show pills in a subagent's session.
  */
 export interface ComposerPill {
-  /** The pill's id, unique within the plugin. The host keeps its element while the id stays. */
+  /** The pill's id, unique within the plugin. */
   readonly id: string
   /** Sorts plugin pills, lowest first; ties keep contribution order. Defaults to 0. */
   readonly order?: number

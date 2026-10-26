@@ -841,7 +841,8 @@ export interface Layout {
   project(server: string, title: string): void
   /**
    * Opens a new draft session in a directory on a server with its prompt filled in, for the user to review and send.
-   * The draft opens in its own tab, as a new session from Home does.
+   * The draft opens in its own tab, as a new session from Home does. Does nothing when the app does not list the
+   * server.
    *
    * @param input - Where the draft runs and what it asks.
    *
@@ -1034,7 +1035,7 @@ export interface Router {
 /** The effective keybinds of published commands. */
 export interface Keybinds {
   /**
-   * Display parts of a published command's effective keybind, e.g. ["Ctrl", "`\"]. Empty when unbound. Reactive.
+   * Display parts of a published command's effective keybind, e.g. ["Ctrl", "K"]. Empty when unbound. Reactive.
    *
    * @param command - A published command id, `${plugin}.${id}`.
    */

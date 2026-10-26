@@ -72,7 +72,8 @@ export interface Context extends BaseContext {
   use<T extends Token>(token: T): Accessor<Live<TokenValue<T>>>
   /**
    * The client of an Ipc your own main entry provides. A call waits while the main entry starts, and rejects when it
-   * cannot answer: on the web, while the plugin's main entry is off or failed, or when main throws. `state` and `on`
+   * cannot answer: on the web, while the plugin's main entry is off or failed, or when main throws. A call waits
+   * indefinitely when the plugin has no main entry. `state` and `on`
    * follow the main entry across restarts. Throws for an Ipc whose id is not your plugin's id or under it.
    *
    * @param token - The Ipc.

@@ -124,8 +124,8 @@ export interface IpcMethod {
 /** The schemas of an Ipc: its state, methods and events. Pass it to `Ipc.define`. */
 export interface IpcSpec {
   /**
-   * The Ipc's id: the providing plugin's id, or `<plugin id>.<name>`. Main starts that plugin on demand when
-   * a window subscribes, before the other main plugins start.
+   * The Ipc's id: the providing plugin's id, or `<plugin id>.<name>`. Once main has listed that plugin, it starts it
+   * on demand when a window subscribes, before the other main plugins start.
    */
   readonly id: string
   /** Schema of the state main keeps per window (`IpcImpl.state`) and pushes with `changed`. Omit it for none. */
@@ -139,7 +139,7 @@ export interface IpcSpec {
 /**
  * A token kind: a contract the main entry provides and window entries use over the IPC bridge, typed by its schemas.
  * Define one with `Ipc.define` in `contract.ts`; provide it from main with `ctx.provide`, and call it from the plugin's
- * windows with `ctx.main`. On the web, where no main process runs, it never answers.
+ * windows with `ctx.main`. On the web, where no main process runs, it is inactive and every call rejects.
  *
  * @example
  * ```ts
@@ -340,7 +340,7 @@ export interface BaseContext {
   /**
    * The client of the server that runs the plugin, the desktop app's own server, as `context.client` in a TUI plugin.
    * Call the plugin's server part through it. A new client after that server restarts; read it where you call it.
-   * While the server is unreachable, every call rejects.
+   * While the server is unreachable, every call rejects. A built-in plugin gets a client whose calls all reject.
    *
    * @example
    * ```ts

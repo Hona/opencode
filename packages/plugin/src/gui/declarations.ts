@@ -12,8 +12,8 @@ export type Stores = Readonly<Record<string, StoreDeclaration>>
  */
 export interface Declarations<S extends Stores = Stores> {
   /**
-   * The operating systems the plugin runs on. Omit it to run everywhere, the web included. A plugin that lists any OS
-   * does not run on the web, where no OS is known.
+   * The operating systems the plugin runs on. Omit it to run on every OS. A plugin from the config runs only in the
+   * desktop app; a built-in that lists any OS does not run on the web, where no OS is known.
    */
   readonly os?: readonly OS[]
   /** The plugin's copy. `ctx.t` reads it first, then the app's shared keys such as `common.*`. */
