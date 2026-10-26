@@ -50,9 +50,9 @@ Each part is an export of the package. Every part's SDK comes from the one `@ope
 - **RPC** (`./rpc`) is a typed contract that the server part implements and the other parts and clients call. See
   [RPC](/build/plugins/rpc).
 
-The plugin's `id` comes from its server part's `Plugin.define`. A package without a server part takes its package name
-(or a local directory's name) as its `id`. A TUI part declares its own `id`; a GUI part
-declares none and takes the plugin's.
+The plugin's `id` comes from its server part's `Plugin.define`. A package with a GUI part and no server part takes its
+package name (or a local directory's name) as its `id`. A TUI part declares its own `id`; a GUI part declares none and
+takes the plugin's.
 
 ## Load
 

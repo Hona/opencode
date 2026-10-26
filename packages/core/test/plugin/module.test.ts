@@ -429,7 +429,7 @@ it.live("blocks a local plugin before module initialization and honors replaceme
   }),
 )
 
-it.live("loads a package without a server part under its package name, without running its parts", () =>
+it.live("loads a GUI-only package under its package name without running it, and leaves a TUI-only one to the TUI", () =>
   Effect.gen(function* () {
     const directory = yield* tmpdirScoped()
     const gui = path.join(directory.path, "gui")
@@ -455,12 +455,12 @@ it.live("loads a package without a server part under its package name, without r
       gui: { options: { region: "eu" } },
       source: { type: "local", path: gui },
     })
-    const terminal = yield* modules.load({ type: "add", target: tui, options: {} })
-    expect(terminal).toMatchObject({ id: "acme-tui", features: { tui: true }, source: { type: "local", path: tui } })
-    if ("pending" in loaded || "blocked" in loaded || "pending" in terminal || "blocked" in terminal)
-      return yield* Effect.die(new Error("Plugins were not loaded"))
+    // The server lists a TUI-only directory as it always has: the TUI loads it from its own config.
+    const terminal = yield* modules.load({ type: "add", target: tui, options: {} }).pipe(Effect.flip)
+    expect(terminal.message).toBe(`Plugin entrypoint not found: ${tui}`)
+    if ("pending" in loaded || "blocked" in loaded) return yield* Effect.die(new Error("The plugin was not loaded"))
 
-    yield* plugins.activate([loaded, terminal])
+    yield* plugins.activate([loaded])
     yield* plugins.awaitActivation
     expect((yield* plugins.list()).filter((plugin) => plugin.source.type === "local")).toEqual([
       {
@@ -468,12 +468,6 @@ it.live("loads a package without a server part under its package name, without r
         source: { type: "local", path: gui },
         state: { status: "active" },
         features: { gui: true },
-      },
-      {
-        id: Plugin.ID.make("acme-tui"),
-        source: { type: "local", path: tui },
-        state: { status: "active" },
-        features: { tui: true },
       },
     ])
   }),

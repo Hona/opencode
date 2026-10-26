@@ -119,12 +119,13 @@ const load = Effect.fn("PluginModule.load")(function* (
       ? { server: pathToFileURL(operation.target).href }
       : yield* Effect.sync(() => Host.resolve(installed ?? { directory: operation.target }))
   const entrypoint = entrypoints.server
-  const found = entrypoint || entrypoints.tui || entrypoints.gui
+  // A TUI-only package is not the server's to list; the TUI loads it from its own config.
+  const found = entrypoint || entrypoints.gui
   if (!local && options?.install === false && !found) return { pending: true as const }
   if (!found) return yield* new LoadError({ message: `Plugin entrypoint not found: ${operation.target}` })
   yield* Effect.log({ msg: "loading plugin", id: operation.target, entrypoint: found })
-  // A package without a server part has nothing to run here: its id is its package name, and its TUI and GUI parts
-  // load from this listing.
+  // A package with only a GUI part (and maybe a TUI part) has nothing to run here: its id is its package name, and its
+  // other parts load from this listing.
   const server = entrypoint
     ? yield* loadServer(entrypoint, local ? sources : undefined, installed?.revision)
     : undefined
