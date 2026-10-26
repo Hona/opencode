@@ -33,7 +33,7 @@ export function PluginStory(props: { file: unknown; children: JSX.Element }) {
   const definition = id ? definitions[`../../gui-plugins/src/${id}/index.ts`] : undefined
   if (!definition) return props.children
   Object.entries(styles)
-    .filter(([file]) => file.startsWith(`../../gui-plugins/src/${definition.id}/`))
+    .filter(([file]) => file.startsWith(`../../gui-plugins/src/${id}/`))
     .forEach(([, css]) => {
       const sheet = document.createElement("style")
       sheet.textContent = css
@@ -42,10 +42,11 @@ export function PluginStory(props: { file: unknown; children: JSX.Element }) {
     })
   // The frame renders a story in one synchronous pass, so the context cannot wait for the async
   // plugin host. It follows the host's rules: the plugin's catalog first, then the app's shared keys.
-  return <PluginContext.Provider value={createStoryContext(definition)}>{props.children}</PluginContext.Provider>
+  return <PluginContext.Provider value={createStoryContext(id, definition)}>{props.children}</PluginContext.Provider>
 }
 
-function createStoryContext(definition: Entry) {
+// Built-ins take their id from their folder, as `compose` keys them.
+function createStoryContext(id: string, definition: Entry) {
   const language = useLanguage()
   const [catalog] = createResource(language.locale, (locale) => loadMessages(definition.i18n, locale), {
     initialValue: definition.i18n?.en ?? {},
@@ -57,7 +58,7 @@ function createStoryContext(definition: Entry) {
     throw new Error(`${name} is unavailable in plugin stories`)
   }
   const context = {
-    id: definition.id,
+    id,
     signal: controller.signal,
     add: unavailable("ctx.add"),
     list: () => [],
