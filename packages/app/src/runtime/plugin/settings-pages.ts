@@ -2,8 +2,6 @@ import { createMemo } from "solid-js"
 import { SettingsPage } from "@opencode/plugin/gui"
 import { usePluginHost } from "./host"
 
-export type SettingsPageItem = ReturnType<ReturnType<typeof createSettingsPages>["items"]>[number]
-
 /** The settings pages plugins contribute. */
 export function createSettingsPages() {
   const host = usePluginHost()

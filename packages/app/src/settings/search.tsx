@@ -326,7 +326,7 @@ export function SettingsSearch() {
   )
 }
 
-/** The settings search index for the current platform, servers, and extensions. */
+/** The settings search index for the current platform, servers, and plugins. */
 export function createSettingsSearchCatalog() {
   const language = useLanguage()
   const platform = usePlatform()

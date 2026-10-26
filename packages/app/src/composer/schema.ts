@@ -184,7 +184,7 @@ export const NoteContextItem = Persistence.struct({ ...NoteFields, commentID: Sc
 
 export type NoteContextItem = typeof NoteContextItem.Type
 
-/** Where text quoted from outside the timeline came from, such as an extension's terminal. */
+/** Where text quoted from outside the timeline came from, such as a plugin's terminal. */
 export const QuoteSource = Persistence.struct({
   label: Schema.String,
   icon: Schema.String,

@@ -150,7 +150,7 @@ export const layoutSchema = Persistence.struct({
   fileTree: Persistence.struct({
     opened: Schema.Boolean,
     width: Schema.Finite,
-    // The file extension owns the tree's tab now. The stored field stays so the migration below
+    // The file plugin owns the tree's tab now. The stored field stays so the migration below
     // keeps telling current layouts from ones saved before the tab existed.
     tab: Schema.Literals(["changes", "all"]),
   }),

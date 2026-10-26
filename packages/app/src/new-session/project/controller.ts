@@ -37,7 +37,7 @@ export function createComposerProjectControls(props: { draftId: string; worktree
       key: ServerConnection.key(connection),
       name: servers.label(connection),
       hint: servers.hint(connection),
-      kind: servers.current(connection) ? "current" : connection.type === "plugin" ? "extension" : "remote",
+      kind: servers.current(connection) ? "current" : connection.type === "plugin" ? "plugin" : "remote",
       label: connection.label,
     }
   }
