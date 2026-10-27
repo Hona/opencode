@@ -386,7 +386,7 @@ function createHost(input: HostInput) {
           ask(undefined, (answer) => <PluginAlertDialog options={options} done={() => answer(undefined)} />),
         prompt: (options) =>
           ask<string | undefined>(undefined, (answer) => <PluginPromptDialog options={options} done={answer} />),
-        select: <T extends string>(options: SelectOptions<T>) =>
+        select: <T,>(options: SelectOptions<T>) =>
           ask<T | undefined>(undefined, (answer) => <PluginSelectDialog options={options} done={answer} />),
       }
     },

@@ -28,9 +28,10 @@ import {
   type ServerRef,
   type SessionRef,
   type SessionScreen,
-  type Sessions,
+  type ShellTab,
   type Storage,
   type StorageScope,
+  type Tabs,
 } from "@opencode/plugin/gui"
 import { BuiltinPanel, type BuiltinStoreFrom, type BuiltinStoreOptions } from "@opencode/plugin/gui/builtin"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -73,7 +74,7 @@ import { ui } from "./ui"
 type Attached = {
   sessions: Accessor<readonly SessionRef[]>
   current: Accessor<MountedSession | undefined>
-  open: Sessions["open"]
+  tabs: Tabs
   screen: Accessor<SessionScreen | undefined>
   scope: (server: string) => ServerScope
   /** Records a session-scoped store so layout pruning drops it with the session. */
@@ -344,7 +345,14 @@ export function createHostApis() {
     sessions: () => ({
       list: () => current()?.sessions() ?? [],
       current: () => current()?.current(),
-      open: (session, options) => write((value) => value.open(session, options)),
+    }),
+    // Before the interface mounts, no tabs are listed and writes wait for it.
+    tabs: () => ({
+      list: () => current()?.tabs.list() ?? [],
+      open: (session, options) => write((value) => value.tabs.open(session, options)),
+      focus: (key) => write((value) => value.tabs.focus(key)),
+      move: (key, index) => write((value) => value.tabs.move(key, index)),
+      close: (key) => write((value) => value.tabs.close(key)),
     }),
     toast: (_plugin, owner, _context, register) => ({
       show(options) {
@@ -353,6 +361,7 @@ export function createHostApis() {
           description: options.description,
           variant: options.variant,
           icon: options.icon,
+          duration: options.duration,
           persistent: options.persistent,
           actions: options.actions?.map((action) => ({
             label: action.label,
@@ -927,8 +936,32 @@ export function createPluginAttachment(apis: HostApis) {
     layout.panel.setScroll(value, key, next)
   }
 
+  // The tab the route shows: a session's, a draft's, or none (Home, Settings).
+  const routedTab = () => {
+    const value = route()
+
+    if (value.type === "session") return findSessionTab(tabs.store, value.server, value.sessionId)
+
+    if (value.type !== "draft") return
+
+    return tabs.store.find((tab) => tab.type === "draft" && tab.draftID === value.draftID)
+  }
+
+  const shellTabs = createMemo((): readonly ShellTab[] => {
+    const refs = new Map(sessions().map((ref) => [ref.key, ref]))
+    const active = routedTab()
+
+    return tabs.store.map((tab) => ({
+      key: tabKey(tab),
+      session: tab.type === "session" ? refs.get(`${tab.server}\n${tab.sessionId}`) : undefined,
+      active: tab === active,
+    }))
+  })
+
+  const findTab = (key: string) => tabs.store.find((tab) => tabKey(tab) === key)
+
   // Opens a session as the session list and the app's notifications do; an unlisted server opens nothing.
-  const openSession: Sessions["open"] = (session, options) => {
+  const openSession: Tabs["open"] = (session, options) => {
     const conn = servers.list.find((item) => ServerConnection.key(item) === session.server)
 
     if (!conn) return
@@ -937,13 +970,35 @@ export function createPluginAttachment(apis: HostApis) {
 
     // A tab that already routes the session, e.g. a subagent opened from its parent's tab, keeps its route.
     if (shown?.type === "session" && shown.routeSessionId === session.id) {
-      if (!options?.background) tabs.select(shown)
+      if (options?.focus) tabs.select(shown)
 
       return
     }
 
-    if (options?.background) return void tabs.addSessionTab({ server: key, sessionId: session.id })
+    if (!options?.focus) return void tabs.addSessionTab({ server: key, sessionId: session.id })
     openNotificationSession(tabs, key, session.id)
+  }
+
+  const shell: Tabs = {
+    list: shellTabs,
+    open: openSession,
+    focus(key) {
+      const tab = findTab(key)
+
+      if (tab) tabs.select(tab)
+    },
+    move(key, index) {
+      const keys = tabs.store.map(tabKey).filter((item) => item !== key)
+
+      if (keys.length === tabs.store.length) return
+      const at = Math.min(Math.max(0, Math.trunc(index)), keys.length)
+      tabs.reorder([...keys.slice(0, at), key, ...keys.slice(at)])
+    },
+    close(key) {
+      const index = tabs.store.findIndex((tab) => tabKey(tab) === key)
+
+      if (index !== -1) tabs.closeTab(index)
+    },
   }
 
   // Runs a command as the palette does; a listed but disabled command does not run.
@@ -983,7 +1038,11 @@ export function createPluginAttachment(apis: HostApis) {
         global.notifications.system(key, () => {
           result.notification = true
 
-          return platform.notify(options.title, options.message, session && (() => openSession(session)))
+          return platform.notify(
+            options.title,
+            options.message,
+            session && (() => openSession(session, { focus: true })),
+          )
         }),
     ])
 
@@ -993,7 +1052,7 @@ export function createPluginAttachment(apis: HostApis) {
   const mounted: Attached = {
     sessions,
     current,
-    open: openSession,
+    tabs: shell,
     run,
     notify,
     mode: theme.mode,

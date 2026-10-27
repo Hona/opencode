@@ -12,6 +12,9 @@ type Scope = { owner?: Owner | null; end: () => void; ctx?: Context }
 /** The context the session-routing case keeps from inside its plugin. */
 type Kept = { ctx?: Context }
 
+/** What the asking case keeps from inside its plugin: its dialogs, the end of its scope, and that scope's prompt. */
+type Asked = { dialogs?: Dialogs; end?: () => void; prompt?: Promise<string | undefined> }
+
 /** What the pre-mount case reads from inside its plugin's setup. */
 type Reads = { state?: () => string; font?: () => string; prefs?: { value?: { count: number }; ready(): boolean } }
 
@@ -183,37 +186,82 @@ story("a dialog pushed in the same tick as a reload never mounts", async ({ page
 })
 
 story(
-  "dialogs.confirm resolves true on confirm, and false when its plugin goes away while it is open",
+  "confirm, alert, prompt and select answer once: with the user's pick, else when their dialog or plugin goes away",
   async ({ page }) => {
     const result = await page.evaluate(async (fixture) => {
-      const { mountPluginHost, until } = await import(fixture)
+      const { mountPluginHost, createKeyed, createSignal, until } = await import(fixture)
       const host = mountPluginHost()
-      const dialogs: Dialogs[] = []
+      const kept: Asked = {}
+      const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
       const button = (label: string) =>
-        Array.from(document.querySelectorAll("button")).find((item) => item.textContent === label)
+        Array.from(document.querySelectorAll("button")).find((element) => element.textContent?.trim() === label)
 
-      // Bounded, so a promise that never settles fails the test instead of timing it out.
-      const settled = <T>(promise: Promise<T>) =>
-        Promise.race([promise, new Promise<string>((resolve) => setTimeout(() => resolve("unsettled"), 5000))])
+      host.load((ctx: Context) => {
+        const [on, set] = createSignal(true)
+        kept.dialogs = ctx.dialogs
+        kept.end = () => set(false)
+        createKeyed(on, () => void (kept.prompt = ctx.dialogs.prompt({ title: "Scoped prompt" })))
+      }, 0)
+      await until(() => !!document.body.textContent?.includes("Scoped prompt"))
+      // The scope that asked ends: its prompt closes and answers undefined.
+      kept.end?.()
+      const scoped = await kept.prompt
+      const dialogs = kept.dialogs
 
-      host.load((ctx: Context) => void dialogs.push(ctx.dialogs), 0)
-      await until(() => dialogs.length === 1)
-      const confirmed = dialogs[0].confirm({ title: "Apply the fixture?", confirm: "Apply" })
-      await until(() => !!button("Apply"))
-      button("Apply")?.click()
-      const first = await settled(confirmed)
-      const open = dialogs[0].confirm({ title: "Discard the fixture?", confirm: "Discard", destructive: true })
-      await until(() => !!button("Discard"))
-      host.reload()
-      const second = await settled(open)
-      await until(() => !button("Discard"))
+      if (!dialogs) throw new Error("The fixture plugin never set up")
+
+      const confirmed = dialogs.confirm({ title: "End the meetup?", confirm: "End", danger: true })
+      await until(() => !!button("End"))
+      button("End")?.click()
+
+      const alerted = dialogs.alert({ title: "Meetup ended", ok: "Got it" })
+      await until(() => !!button("Got it"))
+      button("Got it")?.click()
+
+      const picked = dialogs.select({
+        title: "Links",
+        options: [
+          { title: "Alpha", value: "a" },
+          { title: "Beta", value: "b", description: "second" },
+        ],
+      })
+
+      const beta = () =>
+        Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find((element) =>
+          element.textContent?.includes("Beta"),
+        )
+
+      await until(() => !!beta())
+      beta()?.click()
+
+      const dismissed = dialogs.confirm({ title: "Dismiss me" })
+      await until(() => !!button("Cancel"))
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+
+      const outcome = {
+        scoped,
+        confirmed: await confirmed,
+        alerted: await alerted,
+        picked: await picked,
+        dismissed: await dismissed,
+      }
+
+      await wait(300)
       host.unmount()
 
-      return { first, second }
+      // Asked of a plugin that went away: nothing opens, and the fallback answers at once.
+      return { ...outcome, late: await dialogs.prompt({ title: "Late" }) }
     }, fixture)
 
-    expect(result).toEqual({ first: true, second: false })
+    expect(result).toEqual({
+      scoped: undefined,
+      confirmed: true,
+      alerted: undefined,
+      picked: "b",
+      dismissed: false,
+      late: undefined,
+    })
   },
 )
 

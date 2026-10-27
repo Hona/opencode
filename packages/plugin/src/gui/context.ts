@@ -32,6 +32,7 @@ import type {
   Sessions,
   Storage,
   System,
+  Tabs,
   Toasts,
   Ui,
   Workspaces,
@@ -167,6 +168,15 @@ export interface Context extends BaseContext {
    * ```
    */
   readonly toast: Toasts
+  /**
+   * The shell's tab strip: open, show, move and close session tabs.
+   *
+   * @example
+   * ```ts
+   * const first = (key: string) => ctx.tabs.move(key, 0)
+   * ```
+   */
+  readonly tabs: Tabs
   /**
    * System notifications and sounds that follow the user's notification settings, for when they look elsewhere.
    *

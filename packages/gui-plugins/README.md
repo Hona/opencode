@@ -242,13 +242,14 @@ to the displayed repository or worktree instead of adding a second menu item.
 | Property                     | Type ([window](../plugin/src/gui/host-apis.ts), [main](../plugin/src/gui/main.ts)) | What it does                                                     |
 | ---------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | `ctx.layout`                 | `Layout`                                                                           | Side panel tabs, scroll offsets, settings, open project          |
-| `ctx.sessions`               | `Sessions`                                                                         | Sessions of open tabs, the mounted `MountedSession`, `open`      |
+| `ctx.sessions`               | `Sessions`                                                                         | Sessions of open tabs, and the mounted `MountedSession`          |
 | `ctx.screen`                 | `Screen`                                                                           | Session screen files, comments, composer text, parts and model   |
 | `ctx.storage`                | `Storage`                                                                          | Stores for keys known only at runtime, and window memory         |
 | `ctx.system`                 | `System`                                                                           | Clipboard, saving files, `openExternal`                          |
 | `ctx.desktop`                | `Desktop \| undefined`                                                             | Desktop-only: reveal, launch, installed, zoom, pick files        |
 | `ctx.dialogs`                | `Dialogs`                                                                          | `open`, `confirm`, `alert`, `prompt`, `select`; close with owner |
 | `ctx.toast`                  | `Toasts`                                                                           | Toasts that close when the plugin goes away                      |
+| `ctx.tabs`                   | `Tabs`                                                                             | The shell's tab strip: list, open, show, move and close tabs     |
 | `ctx.attention`              | `Attention`                                                                        | System notifications and sounds, per the user's settings         |
 | `ctx.commands`               | `Commands`                                                                         | Runs a published or app command, as the palette does             |
 | `ctx.links`                  | `Links`                                                                            | Opens a local link, or checks it exists, with the best handler   |
