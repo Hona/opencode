@@ -766,8 +766,6 @@ export const dict = {
   "settings.experimental.row.newIcons.description": "Preview the updated icon set",
   "settings.experimental.row.newModelPicker.title": "New model picker",
   "settings.experimental.row.newModelPicker.description": "Preview the redesigned model picker",
-  "settings.plugins.title": "Plugins",
-  "settings.plugins.description": "Built-in plugins and plugins from your OpenCode config",
   "settings.plugins.reload": "Reload",
   "settings.plugins.status.loading": "Loading",
   "settings.plugins.status.failed": "Failed",
