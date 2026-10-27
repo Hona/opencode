@@ -1,6 +1,6 @@
 import type { PluginInfo } from "@opencode/client"
 import { Predicate } from "effect"
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, createSignal, createUniqueId, For, Show } from "solid-js"
 import { Badge } from "@opencode/ui/badge"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
@@ -173,17 +173,13 @@ function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
               </Show>
             </div>
             <Show when={live()}>
-              {(id) => (
-                <Show when={errorOf(id(), part)}>
-                  {(error) => <pre class="settings-server-dialog-error whitespace-pre-wrap">{error()}</pre>}
-                </Show>
-              )}
+              {(id) => <Show when={errorOf(id(), part)}>{(error) => <PluginError error={error()} />}</Show>}
             </Show>
             <Show when={state() === "unsupported"}>
               <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.plugins.unsupported")}</span>
             </Show>
-            <Show when={state() === "unreadable" && input.id}>
-              {(id) => <pre class="settings-server-dialog-error whitespace-pre-wrap">{itemOf(id(), part)?.error}</pre>}
+            <Show when={state() === "unreadable" && input.id && itemOf(input.id, part)?.error}>
+              {(error) => <PluginError error={error()} />}
             </Show>
             <Show when={state() === "reserved"}>
               <span class="settings-server-dialog-error">{language.t("settings.plugins.reserved")}</span>
@@ -220,5 +216,34 @@ function OwnServerPlugins(props: { plugins: readonly PluginInfo[] }) {
         <p class="text-11-regular text-v2-text-text-muted">{language.t("settings.plugins.parts.note")}</p>
       </Show>
     </>
+  )
+}
+
+/** A plugin's error: its first line, the message, with the rest (such as a stack trace) behind a toggle. */
+function PluginError(props: { error: string }) {
+  const language = useLanguage()
+  const id = createUniqueId()
+  const [open, setOpen] = createSignal(false)
+  const message = () => props.error.split("\n", 1)[0]
+  const more = () => props.error.trimEnd().includes("\n")
+
+  return (
+    <div class="flex min-w-0 flex-col items-start gap-1">
+      <pre id={id} class="settings-server-dialog-error whitespace-pre-wrap">
+        {open() || !more() ? props.error : message()}
+      </pre>
+      <Show when={more()}>
+        <Button
+          size="small"
+          variant="ghost-muted"
+          class="settings-plugin-error-toggle"
+          aria-expanded={open()}
+          aria-controls={id}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {language.t(open() ? "settings.plugins.error.hide" : "settings.plugins.error.show")}
+        </Button>
+      </Show>
+    </div>
   )
 }

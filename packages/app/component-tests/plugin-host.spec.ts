@@ -1178,9 +1178,15 @@ story("Extensions › Plugins merges the own server's plugins with the desktop G
   await expect(plugins.getByText("TUI", { exact: true })).toHaveCount(1)
   await expect(plugins.getByText(/Switches turn off only a plugin's desktop UI/)).toHaveCount(1)
   await expect(plugins.getByText("Not available on this system.", { exact: true })).toBeVisible()
+  // An error shows its first line; the rest, such as a stack trace, is behind a toggle that a one-line error lacks.
   await expect(plugins.getByText("SyntaxError: garbled bundle", { exact: true })).toBeVisible()
-  await expect(plugins.getByText(/flaky broke/)).toBeVisible()
-  await expect(plugins.getByText(/terminal broke/)).toBeVisible()
+  await expect(plugins.getByText("Error: flaky broke", { exact: true })).toBeVisible()
+  await expect(plugins.getByText("Error: terminal broke", { exact: true })).toBeVisible()
+  await expect(plugins.getByRole("button", { name: "Show details" })).toHaveCount(2)
+  const flaky = plugins.locator(".settings-extension-row").filter({ hasText: "flaky" })
+  await flaky.getByRole("button", { name: "Show details" }).press("Enter")
+  await expect(flaky.locator("pre")).toHaveText(/^Error: flaky broke\s+at /)
+  await expect(flaky.getByRole("button", { name: "Hide details" })).toHaveAttribute("aria-expanded", "true")
   await expect(plugins.getByText("Failed", { exact: true })).toHaveCount(2)
   await expect(plugins.getByText("Built-in", { exact: true })).toHaveCount(1)
   // A built-in always runs, so it has no switch; the switches carry on and off without a status label.
