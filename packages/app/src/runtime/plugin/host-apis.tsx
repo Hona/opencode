@@ -13,17 +13,22 @@ import {
 import { createStore, produce, type Store } from "solid-js/store"
 import type { Schema } from "effect"
 import { useDialog } from "@opencode/ui/context/dialog"
+import { useTheme } from "@opencode/ui/theme/context"
+import { toaster } from "@opencode/ui/toast"
 import { base64Encode } from "@opencode/util/encode"
 import {
   type App,
   type Layout,
   type MountedSession,
+  type NotifyOptions,
+  type NotifyResult,
   type OpenOptions,
   type PanelSidebar,
   type PanelState,
   type ServerRef,
   type SessionRef,
   type SessionScreen,
+  type Sessions,
   type Storage,
   type StorageScope,
 } from "@opencode/plugin/gui"
@@ -36,6 +41,9 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { SessionRouteKey, SessionStateKey, type ServerScope } from "@/runtime/server/scope"
 import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
+import { openNotificationSession } from "@/shell/notifications/notification"
+import { playSoundById } from "@/shell/notifications/sound"
+import { showToast } from "@/shell/notifications/toast"
 import { useCurrentRoute, useLayout } from "@/shell/state/layout"
 import { sessionPaneTab, sessionTabPane, type SessionPane } from "@/shell/state/session-tabs"
 import { terminalFontFamily, useSettings } from "@/settings/model"
@@ -60,10 +68,12 @@ import {
   storeImports,
   storeName,
 } from "./stores"
+import { ui } from "./ui"
 
 type Attached = {
   sessions: Accessor<readonly SessionRef[]>
   current: Accessor<MountedSession | undefined>
+  open: Sessions["open"]
   screen: Accessor<SessionScreen | undefined>
   scope: (server: string) => ServerScope
   /** Records a session-scoped store so layout pruning drops it with the session. */
@@ -75,7 +85,10 @@ type Attached = {
   project: (server: string, title: string) => void
   draft: Layout["draft"]
   command: (id: string) => void
+  run: (id: string) => boolean
+  notify: (plugin: string, options: NotifyOptions) => Promise<NotifyResult>
   font: Accessor<string>
+  mode: Accessor<"light" | "dark">
   routing: Accessor<boolean>
   path: Accessor<string>
   keybind: (command: string) => readonly string[]
@@ -95,6 +108,7 @@ export function createHostApis() {
   // The session screen's breakpoint, negated, so no fractional width is both narrow and desktop.
   const desktop = createMediaQuery("(min-width: 768px)")
   const narrow = () => !desktop()
+  const systemDark = createMediaQuery("(prefers-color-scheme: dark)")
   const [attached, setAttached] = createSignal<Attached>()
   const removed = new Set<(value: { server: string; directory: string }) => void>()
   const memory = new Map<string, ReturnType<Storage["memory"]>>()
@@ -265,6 +279,26 @@ export function createHostApis() {
             reveal: (path) => platform.revealPath?.(path) ?? Promise.resolve(false),
             installed: (app) => platform.checkAppExists?.(app) ?? Promise.resolve(false),
             forceFocus: (enabled) => platform.setForceFocus?.(enabled) ?? Promise.resolve(),
+            async pick(options) {
+              if (options?.directory) {
+                const picked = await platform.openDirectoryPickerDialog({
+                  title: options.title,
+                  multiple: options.multiple,
+                })
+
+                return picked === null ? [] : [picked].flat()
+              }
+
+              if (!platform.openFilePathPickerDialog) throw new Error("The file picker is unavailable")
+
+              return (
+                (await platform.openFilePathPickerDialog({
+                  title: options?.title,
+                  multiple: options?.multiple,
+                  extensions: options?.extensions && [...options.extensions],
+                })) ?? []
+              )
+            },
           }
         : undefined,
     app: () => ({
@@ -280,8 +314,11 @@ export function createHostApis() {
       direction: language.direction,
       setDirection: language.setDirection,
     }),
-    // Before the interface mounts, the default mono font.
-    appearance: () => ({ font: () => current()?.font() ?? terminalFontFamily(undefined) }),
+    // Before the interface mounts, the default mono font and the system's color scheme.
+    appearance: () => ({
+      font: () => current()?.font() ?? terminalFontFamily(undefined),
+      mode: () => current()?.mode() ?? (systemDark() ? "dark" : "light"),
+    }),
     router: () => ({
       routing: () => current()?.routing() ?? false,
       path: () => current()?.path() ?? "",
@@ -307,7 +344,42 @@ export function createHostApis() {
     sessions: () => ({
       list: () => current()?.sessions() ?? [],
       current: () => current()?.current(),
+      open: (session, options) => write((value) => value.open(session, options)),
     }),
+    toast: (_plugin, owner, _context, register) => ({
+      show(options) {
+        const id = showToast({
+          title: options.title,
+          description: options.description,
+          variant: options.variant,
+          icon: options.icon,
+          persistent: options.persistent,
+          actions: options.actions?.map((action) => ({
+            label: action.label,
+            // Promise.try isolates a throw, so the toast still closes.
+            onClick: () =>
+              void Promise.try(() => action.run()).catch((cause: unknown) => console.error("[plugin]", cause)),
+          })),
+        })
+
+        const dismiss = () => void toaster.dismiss(id)
+
+        // Under the plugin's root owner, so the toast closes with the plugin, not with the component that showed it.
+        return { dismiss: runWithOwner(owner, () => register(dismiss)) ?? dismiss }
+      },
+    }),
+    // The user's notification settings live in the app interface, so a notification waits for it to mount.
+    attention: (plugin, _owner, context) => ({
+      notify: (options) =>
+        new Promise((resolve) =>
+          write((value) => {
+            if (context.signal.aborted) return resolve({ notification: false, sound: false })
+            void value.notify(plugin, options).then(resolve)
+          }),
+        ),
+    }),
+    // No command is registered before the interface mounts.
+    commands: () => ({ run: (id) => untrack(attached)?.run(id) ?? false }),
     screen: () => ({
       current: () => {
         const attached = current()
@@ -341,6 +413,7 @@ export function createHostApis() {
       command: (id) => write((value) => value.command(id)),
     }),
     embeds: () => embeds,
+    ui: () => ui,
   }
 
   return {
@@ -390,6 +463,8 @@ export function createPluginAttachment(apis: HostApis) {
   const host = usePluginHost()
   const command = useCommand()
   const location = useLocation()
+  const platform = usePlatform()
+  const theme = useTheme()
   const menu = createSessionPanelMenu()
   const desktop = createMediaQuery("(min-width: 768px)")
   const narrow = () => !desktop()
@@ -852,9 +927,76 @@ export function createPluginAttachment(apis: HostApis) {
     layout.panel.setScroll(value, key, next)
   }
 
+  // Opens a session as the session list and the app's notifications do; an unlisted server opens nothing.
+  const openSession: Sessions["open"] = (session, options) => {
+    const conn = servers.list.find((item) => ServerConnection.key(item) === session.server)
+
+    if (!conn) return
+    const key = ServerConnection.key(conn)
+    const shown = findSessionTab(tabs.store, key, session.id)
+
+    // A tab that already routes the session, e.g. a subagent opened from its parent's tab, keeps its route.
+    if (shown?.type === "session" && shown.routeSessionId === session.id) {
+      if (!options?.background) tabs.select(shown)
+
+      return
+    }
+
+    if (options?.background) return void tabs.addSessionTab({ server: key, sessionId: session.id })
+    openNotificationSession(tabs, key, session.id)
+  }
+
+  // Runs a command as the palette does; a listed but disabled command does not run.
+  const run = (id: string) => {
+    const option = untrack(() => command.options.find((item) => item.id === id))
+
+    if (!option?.onSelect || option.disabled) return false
+    const select = option.onSelect
+    void Promise.try(() => select("palette")).catch((cause: unknown) => console.error("[plugin]", cause))
+
+    return true
+  }
+
+  // Follows the user's settings for the app's own notifications: Agent, or Errors for `error`. The coordinator shows a
+  // keyed notification once across windows, and only while none of them has focus.
+  const notify = async (plugin: string, options: NotifyOptions): Promise<NotifyResult> => {
+    const error = options.variant === "error"
+
+    const allowed = untrack(() => ({
+      notification: error ? settings.notifications.errors() : settings.notifications.agent(),
+      sound: options.sound !== false && (error ? settings.sounds.errorsEnabled() : settings.sounds.agentEnabled()),
+      id: error ? settings.sounds.errors() : settings.sounds.agent(),
+    }))
+
+    const key = `plugin:${plugin}\0${options.id ?? crypto.randomUUID()}`
+    const result = { notification: false, sound: false }
+    const session = options.session
+
+    await Promise.allSettled([
+      allowed.sound &&
+        global.notifications.sound(key, () => {
+          result.sound = true
+
+          return playSoundById(allowed.id)
+        }),
+      allowed.notification &&
+        global.notifications.system(key, () => {
+          result.notification = true
+
+          return platform.notify(options.title, options.message, session && (() => openSession(session)))
+        }),
+    ])
+
+    return result
+  }
+
   const mounted: Attached = {
     sessions,
     current,
+    open: openSession,
+    run,
+    notify,
+    mode: theme.mode,
     screen,
     scope,
     scoped: layout.sessionState.track,
@@ -864,7 +1006,7 @@ export function createPluginAttachment(apis: HostApis) {
 
       if (server) void tabs.newDraft({ server: ServerConnection.key(server), directory: input.directory }, input.prompt)
     },
-    command: (id) => command.trigger(id),
+    command: (id) => void run(id),
     font: () => terminalFontFamily(settings.appearance.terminalFont()),
     routing: useIsRouting(),
     path: () => `${location.pathname}${location.search}`,

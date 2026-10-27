@@ -210,7 +210,7 @@ const screenActive = useQuery(() => ({
 
 Each line links to the file whose TSDoc covers every field.
 
-SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the app's icon catalog (`@opencode/ui/icons/catalog`), which `bun run generate` in `packages/plugin` copies into `packages/plugin/src/gui/icon-name.ts`. `src/icon-name.typecheck.ts` fails the typecheck when the two drift.
+SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the app's icon catalog (`@opencode/ui/icons/catalog`), which `bun run generate` in `packages/plugin` copies into `packages/plugin/src/gui/icon-name.ts`. `src/icon-name.typecheck.ts` fails the typecheck when the two drift. A plugin bundle cannot require `@opencode/ui`, so it renders an icon with `ctx.ui.Icon`, and the app's buttons, menus, dialog frame, fields, Markdown and code with the other `ctx.ui` components.
 
 ### Registries
 
@@ -242,17 +242,21 @@ to the displayed repository or worktree instead of adding a second menu item.
 | Property                     | Type ([window](../plugin/src/gui/host-apis.ts), [main](../plugin/src/gui/main.ts)) | What it does                                                     |
 | ---------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | `ctx.layout`                 | `Layout`                                                                           | Side panel tabs, scroll offsets, settings, open project          |
-| `ctx.sessions`               | `Sessions`                                                                         | Sessions of open tabs, and the mounted `MountedSession`          |
-| `ctx.screen`                 | `Screen`                                                                           | The session screen's files, comments and composer                |
+| `ctx.sessions`               | `Sessions`                                                                         | Sessions of open tabs, the mounted `MountedSession`, `open`      |
+| `ctx.screen`                 | `Screen`                                                                           | Session screen files, comments, composer text, parts and model   |
 | `ctx.storage`                | `Storage`                                                                          | Stores for keys known only at runtime, and window memory         |
 | `ctx.system`                 | `System`                                                                           | Clipboard, saving files, `openExternal`                          |
-| `ctx.desktop`                | `Desktop \| undefined`                                                             | Desktop-only: reveal, launch, installed, zoom                    |
-| `ctx.dialogs`                | `Dialogs`                                                                          | `open` returns a handle to close; a dialog closes with its owner |
+| `ctx.desktop`                | `Desktop \| undefined`                                                             | Desktop-only: reveal, launch, installed, zoom, pick files        |
+| `ctx.dialogs`                | `Dialogs`                                                                          | `open`, `confirm`, `alert`, `prompt`, `select`; close with owner |
+| `ctx.toast`                  | `Toasts`                                                                           | Toasts that close when the plugin goes away                      |
+| `ctx.attention`              | `Attention`                                                                        | System notifications and sounds, per the user's settings         |
+| `ctx.commands`               | `Commands`                                                                         | Runs a published or app command, as the palette does             |
 | `ctx.links`                  | `Links`                                                                            | Opens a local link, or checks it exists, with the best handler   |
 | `ctx.embeds`                 | `Embeds`                                                                           | Shows a web page the main entry created                          |
+| `ctx.ui`                     | `Ui`                                                                               | The app's icons, buttons, menus, dialog frame, Markdown and code |
 | `ctx.app`                    | `App`                                                                              | Version, channel, platform, packaged                             |
 | `ctx.locale`                 | `Locale`                                                                           | Locale and writing direction                                     |
-| `ctx.appearance`             | `Appearance`                                                                       | The user's mono font                                             |
+| `ctx.appearance`             | `Appearance`                                                                       | The user's mono font, and the light or dark scheme               |
 | `ctx.router`                 | `Router`                                                                           | The route path, and whether it is changing                       |
 | `ctx.keybinds`               | `Keybinds`                                                                         | Display and matching of command keybinds                         |
 | `ctx.servers`                | `Servers`                                                                          | The servers the app lists, and each one's live `ServerRef`       |

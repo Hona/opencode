@@ -306,6 +306,7 @@ export const dict = {
   "common.loading": "Loading",
   "common.loading.ellipsis": "…",
   "common.cancel": "Cancel",
+  "common.ok": "OK",
   "common.clear": "Clear",
   "common.color.orange": "orange",
   "common.color.yellow": "yellow",
