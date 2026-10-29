@@ -183,7 +183,10 @@ export function createServerTransport(input: {
 }): ServerTransport {
   const queue = createRequestQueue({ fetch: input.fetch ?? globalThis.fetch })
 
-  const build = (http: ServerConnection.HttpBase) => {
+  // Keeps the endpoint as plain values: a plugin's endpoint can be a store proxy that already reads the next password,
+  // and the clients built here keep the one they started with.
+  const build = (input: ServerConnection.HttpBase) => {
+    const http = { url: input.url, password: input.password }
     const api = createApiForServer({ server: http, fetch: queue.fetch })
 
     return { http, api, pty: createPtyClient(api, { url: http.url }) }
