@@ -5,7 +5,7 @@ import { LocationNotFoundError, InvalidRequestError, SessionNotFoundError } from
 import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
-import { locationErrors, requestRef, sessionInfo, type LocationServices } from "../location"
+import { DefaultLocation, locationErrors, requestRef, sessionInfo, type LocationServices } from "../location"
 
 export class FormLocationMiddleware extends HttpApiMiddleware.Service<
   FormLocationMiddleware,
@@ -20,6 +20,7 @@ export const formLocationLayer = Layer.effect(
     const sessions = yield* Session.Service
     const instances = yield* Instance.Service
     const locations = yield* LocationServiceMap.Service
+    const fallback = yield* DefaultLocation
 
     return FormLocationMiddleware.of((effect, options) =>
       Effect.gen(function* () {
@@ -29,7 +30,7 @@ export const formLocationLayer = Layer.effect(
           // the session row lookup because some MCP elicitations cannot currently be attributed to
           // a real session. Keep this undocumented and remove once elicitations carry session ownership.
           const request = yield* HttpServerRequest.HttpServerRequest
-          return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))), locationErrors)
+          return yield* effect.pipe(Effect.provide(locations.get(requestRef(request, fallback))), locationErrors)
         }
 
         const session = yield* sessionInfo(sessions, route.params.sessionID)

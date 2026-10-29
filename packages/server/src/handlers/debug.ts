@@ -6,11 +6,12 @@ import { Effect, Option, RcMap } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import path from "node:path"
 import { Api } from "../api"
-import { requestRef } from "../location"
+import { DefaultLocation, requestRef } from "../location"
 
 export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers) =>
   Effect.gen(function* () {
     const global = yield* Global.Service
+    const fallback = yield* DefaultLocation
     return handlers
       .handle(
         "debug.heapDump",
@@ -50,7 +51,7 @@ export const DebugHandler = HttpApiBuilder.group(Api, "server.debug", (handlers)
           const locations = Option.getOrThrow(yield* Effect.serviceOption(LocationServiceMap.Service))
           // Resolve through requestRef so the key matches the shape the location
           // middleware cached the services under.
-          yield* locations.invalidate(requestRef(ctx.request))
+          yield* locations.invalidate(requestRef(ctx.request, fallback))
         }),
       )
   }),

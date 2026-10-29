@@ -977,80 +977,88 @@ test("home startup prompt is submitted exactly once", async () => {
   expect(bodies[0]).toMatchObject({ text: "HOME_READY" })
 })
 
-test.each([false, true])("uses the resolved launch directory for new prompts (fallback: %s)", async (fallback) => {
-  await using state = await tmpdir()
-  const target = fallback ? directory : process.cwd()
-  const location = { directory: target, project: { id: "project", directory: target, canonical: target } }
-  const requests: URL[] = []
-  const created = Promise.withResolvers<unknown>()
-  const submitted = Promise.withResolvers<unknown>()
-  let session: unknown
-  await using setup = await createAppFixture({
-    state: state.path,
-    config: { animations: false, tabs: { mode: "off" }, keybinds: { "session.new": "f6" } },
-    fetch: async (url, request) => {
-      requests.push(url)
-      if (url.searchParams.has("location[directory]") && url.searchParams.get("location[directory]") !== target)
-        return json({ message: "Directory does not exist on the server" }, { status: 500 })
-      if (url.pathname === "/api/fs/list") return json({ location, data: [] })
-      if (url.pathname === "/api/location") return json(location)
-      if (url.pathname === "/api/agent")
-        return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
-      if (url.pathname === "/api/model")
-        return json({ location, data: [{ id: "model", providerID: "provider", name: "Remote Model", variants: [] }] })
-      if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
-      if (url.pathname === "/api/session" && request.method === "POST") {
-        const input: unknown = await request.json()
-        if (typeof input !== "object" || input === null) throw new Error("Expected a session input")
-        created.resolve(input)
-        session = {
-          ...input,
-          projectID: "project",
-          cost: 0,
-          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-          time: { created: 0, updated: 0 },
+// When the server cannot resolve the launch directory, the TUI opens in the home directory the server reports;
+// older servers report none and resolve their default location instead.
+test.each(["launch", "home", "legacy"] as const)(
+  "uses the resolved launch directory for new prompts (%s)",
+  async (launch) => {
+    await using state = await tmpdir()
+    const fallback = launch !== "launch"
+    const target = fallback ? directory : process.cwd()
+    const location = { directory: target, project: { id: "project", directory: target, canonical: target } }
+    const requests: URL[] = []
+    const created = Promise.withResolvers<unknown>()
+    const submitted = Promise.withResolvers<unknown>()
+    let session: unknown
+    await using setup = await createAppFixture({
+      state: state.path,
+      config: { animations: false, tabs: { mode: "off" }, keybinds: { "session.new": "f6" } },
+      fetch: async (url, request) => {
+        requests.push(url)
+        if (url.searchParams.has("location[directory]") && url.searchParams.get("location[directory]") !== target)
+          return json({ message: "Directory does not exist on the server" }, { status: 500 })
+        if (url.pathname === "/api/fs/list") return json({ location, data: [] })
+        if (url.pathname === "/api/location") return json(location)
+        if (launch === "home" && url.pathname === "/api/info")
+          return json({ version: "test", pid: 0, urls: [], paths: { tmp: "/tmp", home: target } })
+        if (url.pathname === "/api/agent")
+          return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+        if (url.pathname === "/api/model")
+          return json({ location, data: [{ id: "model", providerID: "provider", name: "Remote Model", variants: [] }] })
+        if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
+        if (url.pathname === "/api/session" && request.method === "POST") {
+          const input: unknown = await request.json()
+          if (typeof input !== "object" || input === null) throw new Error("Expected a session input")
+          created.resolve(input)
+          session = {
+            ...input,
+            projectID: "project",
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 0, updated: 0 },
+          }
+          return json({ data: session })
         }
-        return json({ data: session })
-      }
-      if (/^\/api\/session\/[^/]+\/prompt$/.test(url.pathname)) {
-        submitted.resolve(await request.json())
-        return json({ data: {} })
-      }
-      if (/^\/api\/session\/[^/]+\/(message|inbox|permission)$/.test(url.pathname))
-        return json({ data: [], cursor: {} })
-      if (session && /^\/api\/session\/[^/]+$/.test(url.pathname)) return json({ data: session })
-      return undefined
-    },
-  })
+        if (/^\/api\/session\/[^/]+\/prompt$/.test(url.pathname)) {
+          submitted.resolve(await request.json())
+          return json({ data: {} })
+        }
+        if (/^\/api\/session\/[^/]+\/(message|inbox|permission)$/.test(url.pathname))
+          return json({ data: [], cursor: {} })
+        if (session && /^\/api\/session\/[^/]+$/.test(url.pathname)) return json({ data: session })
+        return undefined
+      },
+    })
 
-  await setup.ready
-  await setup.waitForFrame((frame) => frame.includes("Build · Remote Model Provider"))
-  setup.mockInput.pressKey("F6")
-  await setup.renderOnce()
-  await setup.mockInput.typeText("REMOTE_READY")
-  await setup.waitForFrame((frame) => frame.includes("REMOTE_READY"))
-  setup.mockInput.pressEnter()
-  expect(
-    await Promise.race([
-      submitted.promise,
-      Bun.sleep(2_000).then(() => {
-        throw new Error("prompt was not submitted in the resolved server directory")
-      }),
-    ]),
-  ).toMatchObject({ text: "REMOTE_READY" })
-  expect(await created.promise).toMatchObject({ location: { directory: target } })
-  expect(requests[0]?.pathname).toBe("/api/fs/list")
-  expect(requests[0]?.searchParams.get("location[directory]")).toBe(process.cwd())
-  expect(
-    requests.filter((url) => url.pathname === "/api/location" && !url.searchParams.has("location[directory]")),
-  ).toHaveLength(fallback ? 1 : 0)
-  expect(
-    requests
-      .slice(1)
-      .filter((url) => url.searchParams.has("location[directory]"))
-      .every((url) => url.searchParams.get("location[directory]") === target),
-  ).toBe(true)
-})
+    await setup.ready
+    await setup.waitForFrame((frame) => frame.includes("Build · Remote Model Provider"))
+    setup.mockInput.pressKey("F6")
+    await setup.renderOnce()
+    await setup.mockInput.typeText("REMOTE_READY")
+    await setup.waitForFrame((frame) => frame.includes("REMOTE_READY"))
+    setup.mockInput.pressEnter()
+    expect(
+      await Promise.race([
+        submitted.promise,
+        Bun.sleep(2_000).then(() => {
+          throw new Error("prompt was not submitted in the resolved server directory")
+        }),
+      ]),
+    ).toMatchObject({ text: "REMOTE_READY" })
+    expect(await created.promise).toMatchObject({ location: { directory: target } })
+    expect(requests[0]?.pathname).toBe("/api/fs/list")
+    expect(requests[0]?.searchParams.get("location[directory]")).toBe(process.cwd())
+    expect(
+      requests.filter((url) => url.pathname === "/api/location" && !url.searchParams.has("location[directory]")),
+    ).toHaveLength(launch === "legacy" ? 1 : 0)
+    expect(
+      requests
+        .slice(1)
+        .filter((url) => url.searchParams.has("location[directory]"))
+        .every((url) => url.searchParams.get("location[directory]") === target),
+    ).toBe(true)
+  },
+)
 
 test("error investigations repeatedly seed editable home drafts without creating sessions", async () => {
   const cwd = process.cwd()
@@ -1389,10 +1397,10 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
 
 test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
   "selection copy and pane management respect %s mode in the prompt and terminal pane",
-    async (copy) => {
-      await using state = await tmpdir()
-      const setup = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true })
-      await setup.renderer.setupTerminal()
+  async (copy) => {
+    await using state = await tmpdir()
+    const setup = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true })
+    await setup.renderer.setupTerminal()
     setup.renderer.start()
     const ready = Promise.withResolvers<void>()
     const session = {
@@ -1987,9 +1995,7 @@ test("free usage limit offers OpenCode Go once per 24h, transitions Subscribe to
   setup.mockInput.pressEnter()
   await setup.waitForFrame((frame) => frame.includes("GOGO-1234"))
   expect(openSpy).toHaveBeenCalledWith("https://opencode.ai/go")
-  expect(oauthRequests).toEqual([
-    { methodID: "device", answer: { server: "https://opencode.ai/console" } },
-  ])
+  expect(oauthRequests).toEqual([{ methodID: "device", answer: { server: "https://opencode.ai/console" } }])
   const connectFrame = setup.captureCharFrame()
   expect(connectFrame).toContain("OpenCode Console account")
   expect(connectFrame).not.toContain("Enter Go API key")
@@ -2278,7 +2284,13 @@ test("free usage limit Subscribe handles mid-auth/mid-sync Escape, sync failure,
     created: 6,
     type: "session.step.started",
     durable: { aggregateID: session.id, seq: 6, version: 1 },
-    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_expired", agent: "build", model, started: 6 },
+    data: {
+      sessionID: session.id,
+      assistantMessageID: "msg_free_assistant_expired",
+      agent: "build",
+      model,
+      started: 6,
+    },
   })
   setup.events.emit({
     id: "evt_free_limit_expired_fail",
@@ -2771,4 +2783,3 @@ test.each([44, 100])(
   },
   15_000,
 )
-

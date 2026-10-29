@@ -1,4 +1,5 @@
 import type { SessionInfo } from "@opencode/client/promise"
+import { Option, Schema } from "effect"
 import { pathKey } from "@/workspaces/path-key"
 import { isProjectDirectory } from "@/workspaces/paths"
 import type { ServerConnection } from "@/runtime/server/registry"
@@ -32,7 +33,13 @@ export function projectForSession<T extends { id?: string; worktree: string; san
   session: SessionInfo,
   projects: T[],
 ) {
-  const matching = projects.filter((project) => project.id === session.projectID)
+  // Repositories without a root commit and the server's global scope all share the `global` ID, so that ID matches
+  // only a project that contains the session's directory.
+  const matching = projects.filter(
+    (project) =>
+      project.id === session.projectID &&
+      (session.projectID !== "global" || isProjectDirectory(project, session.location.directory)),
+  )
 
   if (matching.length === 1) return matching[0]
 
@@ -65,12 +72,13 @@ export function projectForSession<T extends { id?: string; worktree: string; san
     .sort((a, b) => b.worktree.length - a.worktree.length)[0]
 }
 
-export const errorMessage = (err: unknown, fallback: string) => {
-  if (err && typeof err === "object" && "data" in err) {
-    const data = (err as { data?: { message?: string } }).data
+const decodeErrorData = Schema.decodeUnknownOption(Schema.Struct({ data: Schema.Struct({ message: Schema.String }) }))
 
-    if (data?.message) return data.message
-  }
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- a rejected request is opaque; this formats it
+export const errorMessage = (err: unknown, fallback: string) => {
+  const message = Option.getOrUndefined(decodeErrorData(err))?.data.message
+
+  if (message) return message
 
   if (err instanceof Error) return err.message
 

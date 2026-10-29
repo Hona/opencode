@@ -3,6 +3,7 @@ import type { LocalProject } from "@/shell/state/layout"
 import { displayName } from "@opencode/ui/project-avatar"
 import { compareSessionTime } from "@/shell/layout/helpers"
 import { pathKey } from "@/workspaces/path-key"
+import { isProjectDirectory } from "@/workspaces/paths"
 import { getFilename } from "@opencode/util/path"
 
 export type HomeSessionRecord = {
@@ -42,7 +43,8 @@ export function buildHomeSessionRecords(input: {
 }
 
 // Worktree inventories load on demand, so a worktree session may not match any directory yet;
-// the session's project ID still identifies its added project.
+// the session's project ID still identifies its added project. Repositories without a root commit and the server's
+// global scope share the `global` ID, so that ID identifies only a project containing the session's directory.
 export function homeProjectForSession<T extends { id?: string; worktree: string; sandboxes?: readonly string[] }>(
   session: SessionInfo,
   projects: readonly T[],
@@ -53,6 +55,11 @@ export function homeProjectForSession<T extends { id?: string; worktree: string;
     projects.find(
       (item) =>
         pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
-    ) ?? projects.find((item) => item.id === session.projectID)
+    ) ??
+    projects.find(
+      (item) =>
+        item.id === session.projectID &&
+        (session.projectID !== "global" || isProjectDirectory(item, session.location.directory)),
+    )
   )
 }

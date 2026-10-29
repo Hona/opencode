@@ -49,9 +49,11 @@ import { Database } from "../src/database/database"
 import { Bus } from "../src/bus"
 import { Reference } from "../src/reference"
 import { Tool } from "../src/tool"
+import { ProjectTable } from "../src/project/sql"
+import { Vcs } from "../src/vcs"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, Global.node, LocationServiceMap.node]), [
     Global.node.replace(tempGlobalLayer),
     offlineModels,
   ]),
@@ -733,5 +735,38 @@ describe("LocationServiceMap", () => {
         }),
       ),
     ),
+  )
+})
+
+describe("global scope", () => {
+  // Requests that name no Location resolve here on a service, so it must stay free of project work.
+  it.live("resolves the global config directory without recording, activating, or initializing a project", () =>
+    Effect.gen(function* () {
+      const global = yield* Global.Service
+      const config = AbsolutePath.make(global.config)
+      const empty = AbsolutePath.make(global.data)
+      const database = yield* Database.Service
+      // A repository without a root commit also owns the `global` project ID.
+      yield* database.db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: empty, sandboxes: [], time_active: 1 })
+        .run()
+      const locations = yield* LocationServiceMap.Service
+
+      const scope = yield* Effect.gen(function* () {
+        const location = yield* Location.Service
+        const vcs = yield* Vcs.Service
+        return { location, initialized: yield* Effect.flip(vcs.initialize("git")) }
+      }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: config }))), Effect.scoped)
+
+      expect(scope.location).toEqual({
+        directory: config,
+        project: { id: Project.ID.global, directory: config, canonical: config },
+        global: true,
+      })
+      expect(scope.initialized.kind).toBe("unsupported")
+      const rows = yield* database.db.select().from(ProjectTable).all()
+      expect(rows.map((row) => [row.id, row.worktree, row.time_active])).toEqual([[Project.ID.global, empty, 1]])
+    }),
   )
 })

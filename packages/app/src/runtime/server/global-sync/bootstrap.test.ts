@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
-import { OpenCode } from "@opencode/client/promise"
+import { OpenCode, type LocationGetInput } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
 import { bootstrapGlobal, inferHomeDirectory, loadPathQuery, loadProjectsQuery } from "./bootstrap"
 import { ServerScope } from "@/runtime/server/scope"
-import type { ServerApi } from "@/runtime/server/api"
 import { createServerTransport } from "@/runtime/server/client"
+import { ServerConnection } from "@/runtime/server/registry"
 import type { ServerSync } from "@/runtime/server/sync"
 import { worktreeInventoryKey } from "@/workspaces/inventory"
 
@@ -24,6 +24,9 @@ test("bootstraps projects through the native store setter and preserves subseque
 
         if (url.pathname === "/api/project")
           return Response.json([{ id: "project", canonical: "/repo", time: { created: 1, updated: 1 }, sandboxes: [] }])
+
+        if (url.pathname === "/api/info")
+          return Response.json({ version: "1", pid: 1, urls: [], paths: { tmp: "/tmp" } })
         throw new Error(`Unexpected request: ${url.pathname}`)
       },
       { preconnect() {} },
@@ -112,22 +115,34 @@ test("recovers project metadata after the connection to the server is dropped", 
 
 describe("query keys", () => {
   test("partitions identical directories by server scope and loads current location metadata", async () => {
-    const calls: unknown[] = []
+    const calls: (LocationGetInput | undefined)[] = []
 
     const location = {
-      get: async (input: unknown) => {
+      get: async (input?: LocationGetInput) => {
         calls.push(input)
 
-        return { directory: "/repo/subpath", project: { id: "project", directory: "/repo" } }
+        return { directory: "/repo/subpath", project: { id: "project", directory: "/repo", canonical: "/repo" } }
       },
-    } as ServerApi["location"]
+    }
 
-    const remote = "https://debian.example" as typeof ServerScope.local
+    const server = { info: async () => ({ version: "1", pid: 1, urls: [], paths: { tmp: "/tmp" } }) }
 
-    expect([...loadPathQuery(ServerScope.local, "/repo", location).queryKey]).toEqual(["local", "/repo", "path"])
-    expect([...loadPathQuery(remote, "/repo", location).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
+    const remote = ServerScope.fromServerKey(ServerConnection.Key.make("https://debian.example"))
 
-    const result = await new QueryClient().fetchQuery(loadPathQuery(ServerScope.local, "/repo/subpath", location))
+    expect([...loadPathQuery(ServerScope.local, "/repo", { location, server }).queryKey]).toEqual([
+      "local",
+      "/repo",
+      "path",
+    ])
+    expect([...loadPathQuery(remote, "/repo", { location, server }).queryKey]).toEqual([
+      "https://debian.example",
+      "/repo",
+      "path",
+    ])
+
+    const result = await new QueryClient().fetchQuery(
+      loadPathQuery(ServerScope.local, "/repo/subpath", { location, server }),
+    )
 
     expect(calls).toEqual([{ location: { directory: "/repo/subpath" } }])
     expect(result).toMatchObject({ directory: "/repo/subpath", worktree: "/repo" })
@@ -135,6 +150,28 @@ describe("query keys", () => {
     expect(inferHomeDirectory("/home/ubuntu/workspace/repo")).toBe("/home/ubuntu")
     expect(inferHomeDirectory("C:\\Users\\luke\\repo")).toBe("C:\\Users\\luke")
     expect(inferHomeDirectory("/repo/subpath")).toBe("")
+  })
+
+  // A service's default location is the global config directory, so only the server knows its home directory.
+  test("takes the home directory from the server and infers it only for servers that do not report it", async () => {
+    const at = (directory: string) => ({
+      get: async () => ({ directory, project: { id: "global", directory, canonical: directory } }),
+    })
+
+    const server = (home?: string) => ({
+      info: async () => ({ version: "1", pid: 1, urls: [], paths: { tmp: "/tmp", home } }),
+    })
+
+    const reported = await new QueryClient().fetchQuery(
+      loadPathQuery(ServerScope.local, null, { location: at("/srv/opencode/config"), server: server("/srv/home") }),
+    )
+
+    const inferred = await new QueryClient().fetchQuery(
+      loadPathQuery(ServerScope.local, null, { location: at("/Users/kamil/.config/opencode"), server: server() }),
+    )
+
+    expect(reported.home).toBe("/srv/home")
+    expect(inferred.home).toBe("/Users/kamil")
   })
 
   test("loads project metadata in server order without enumerating any project's worktrees", async () => {

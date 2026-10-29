@@ -60,6 +60,20 @@ setup(ctx) {
 }
 ```
 
+#### Global scope
+
+A request that names no project, such as listing plugins from the desktop app, loads plugins in the global scope.
+There, `ctx.location.directory` is the global config directory and `ctx.location.project.id` is `"global"`. A plugin
+that indexes or watches its location should skip the global scope. A Git repository with no commits and no remote
+also uses the `"global"` ID.
+
+```ts
+setup(ctx) {
+  if (ctx.location.project.id === "global") return
+  startIndexer(ctx.location.directory)
+}
+```
+
 ### Options
 
 Pass plugin options with the object form in `opencode.json(c)`.

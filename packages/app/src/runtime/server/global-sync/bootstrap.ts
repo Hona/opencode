@@ -1,5 +1,5 @@
 import type { Config, Path, Project, ProviderAuthResponse } from "@/runtime/server/types"
-import type { LocationGetInput, LocationGetOutput, ProjectListOutput } from "@opencode/client/promise"
+import type { LocationGetInput, LocationGetOutput, ProjectListOutput, ServerInfoOutput } from "@opencode/client/promise"
 import { showToast } from "@/shell/notifications/toast"
 import { getFilename } from "@opencode/util/path"
 import { retry } from "@opencode/util/retry"
@@ -31,7 +31,7 @@ function waitForPaint() {
 
     const timer = setTimeout(finish, 50)
 
-    if (typeof requestAnimationFrame !== "function") return
+    if (!("requestAnimationFrame" in globalThis)) return
     requestAnimationFrame(() => {
       setTimeout(() => {
         clearTimeout(timer)
@@ -41,11 +41,11 @@ function waitForPaint() {
   })
 }
 
-function errors(list: PromiseSettledResult<unknown>[]) {
-  return list.filter((item): item is PromiseRejectedResult => item.status === "rejected").map((item) => item.reason)
+function errors<T>(list: PromiseSettledResult<T>[]) {
+  return list.flatMap((item) => (item.status === "rejected" ? [item.reason] : []))
 }
 
-function runAll(list: Array<() => Promise<unknown>>) {
+function runAll<T>(list: Array<() => Promise<T>>) {
   return Promise.allSettled(list.map((item) => item()))
 }
 
@@ -61,6 +61,10 @@ type ProjectApi = {
 }
 
 type LocationApi = { readonly get: (input?: LocationGetInput) => Promise<LocationGetOutput> }
+
+type InfoApi = { readonly info: () => Promise<ServerInfoOutput> }
+
+type PathApi = { readonly location: LocationApi; readonly server: InfoApi }
 
 // Metadata only, in the server's order (most recently active first). Worktree inventories load per project when a
 // view shows it (see workspaces/inventory).
@@ -92,8 +96,7 @@ export function loadProjects(input: {
 }
 
 export async function bootstrapGlobal(input: {
-  serverAPI: {
-    readonly location: LocationApi
+  serverAPI: PathApi & {
     readonly project: ProjectApi
   }
   scope: ServerScope
@@ -104,7 +107,7 @@ export async function bootstrapGlobal(input: {
     () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope)),
     () =>
       input.queryClient
-        .fetchQuery(loadPathQuery(input.scope, null, input.serverAPI.location))
+        .fetchQuery(loadPathQuery(input.scope, null, input.serverAPI))
         .then((data) => input.setGlobalStore("path", data)),
     () =>
       loadProjects({
@@ -115,7 +118,7 @@ export async function bootstrapGlobal(input: {
       }),
   ]
 
-  await runAll(slow)
+  await Promise.allSettled(slow.map((task) => task()))
 }
 
 function projectID(directory: string, projects: Project[]) {
@@ -131,17 +134,22 @@ export function inferHomeDirectory(path: string) {
   return path.includes("\\") ? match[1]!.replaceAll("/", "\\") : match[1]!
 }
 
-export const loadPathQuery = (scope: ServerScope, directory: string | null, api: LocationApi) =>
+export const loadPathQuery = (scope: ServerScope, directory: string | null, api: PathApi) =>
   queryOptions<Path>({
     queryKey: [scope, directory, "path"],
     queryFn: () =>
-      api.get(directory ? { location: { directory } } : undefined).then((location) => ({
-        state: "",
-        config: "",
-        worktree: location.project.directory,
-        directory: location.directory,
-        home: inferHomeDirectory(location.directory) || inferHomeDirectory(location.project.directory),
-      })),
+      Promise.all([api.location.get(directory ? { location: { directory } } : undefined), api.server.info()]).then(
+        ([location, info]) => ({
+          state: "",
+          config: "",
+          worktree: location.project.directory,
+          directory: location.directory,
+          // Servers before `paths.home` only reveal it through a location path.
+          home:
+            info.paths.home ??
+            (inferHomeDirectory(location.directory) || inferHomeDirectory(location.project.directory)),
+        }),
+      ),
   })
 
 export async function bootstrapDirectory(input: {

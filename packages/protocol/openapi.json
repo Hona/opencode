@@ -220,7 +220,7 @@
             }
           }
         },
-        "description": "Resolve the requested location or the server default location.",
+        "description": "Resolve the requested location. Without one, resolve the server default location: the directory the server was started with, or else the global scope at the global config directory, whose project ID is `global`.",
         "summary": "Get location"
       }
     },
@@ -21481,6 +21481,26 @@
             "properties": {
               "tmp": {
                 "type": "string"
+              },
+              "home": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "config": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": ["tmp"],

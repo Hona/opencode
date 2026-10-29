@@ -3,6 +3,7 @@ import type { SessionInfo } from "@opencode/client/promise"
 import type { LocalProject } from "@/shell/state/layout"
 import { buildHomeSessionRecords, homeSessionLocation } from "./records"
 
+// SAFETY: the home records read only these session fields.
 const session = (id: string, directory: string, projectID: string) =>
   ({
     id,
@@ -13,7 +14,7 @@ const session = (id: string, directory: string, projectID: string) =>
   }) as SessionInfo
 
 describe("buildHomeSessionRecords", () => {
-  const opened = { id: "project-a", worktree: "/repo/a" } as LocalProject
+  const opened: LocalProject = { id: "project-a", worktree: "/repo/a" }
   const sessions = [session("a", "/repo/a", "project-a"), session("b", "/repo/b", "project-b")]
 
   test("includes sessions outside added projects when unfiltered", () => {
@@ -49,7 +50,7 @@ describe("buildHomeSessionRecords", () => {
   })
 
   test("prefers the added project whose directory matches over a sibling entry with the same ID", () => {
-    const nested = { id: "project-a", worktree: "/repo/a/packages/app" } as LocalProject
+    const nested: LocalProject = { id: "project-a", worktree: "/repo/a/packages/app" }
 
     const records = buildHomeSessionRecords({
       sessions: () => [session("n", "/repo/a/packages/app", "project-a")],
@@ -58,6 +59,24 @@ describe("buildHomeSessionRecords", () => {
     })
 
     expect(records[0]?.project.worktree).toBe("/repo/a/packages/app")
+  })
+
+  test("labels a global-scope session with its own directory, not a `global` project elsewhere", () => {
+    const empty: LocalProject = { id: "global", worktree: "/repos/empty" }
+
+    const records = buildHomeSessionRecords({
+      sessions: () => [
+        session("scope", "/home/luke/.config/opencode", "global"),
+        session("nested", "/repos/empty/src", "global"),
+      ],
+      projectDirectories: () => undefined,
+      projects: () => [empty],
+    })
+
+    expect(Object.fromEntries(records.map((record) => [record.session.id, record.project.worktree]))).toEqual({
+      scope: "/home/luke/.config/opencode",
+      nested: "/repos/empty",
+    })
   })
 
   test("orders by update time and uses the id only to break equal timestamps", () => {

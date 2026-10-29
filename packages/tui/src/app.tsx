@@ -226,7 +226,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const api = OpenCode.make(options)
   const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
     Effect.map((response) => response.location),
-    Effect.catch(() => Effect.tryPromise(() => api.location.get())),
+    // A server that cannot resolve this directory opens in its home directory. Its default location would be the
+    // global scope on a service; servers that predate `paths.home` still resolve that default.
+    Effect.catch(() =>
+      Effect.tryPromise(async () => {
+        const home = (await api.server.info()).paths.home
+        return api.location.get(home ? { location: { directory: home } } : undefined)
+      }),
+    ),
   )
   const directory = location.directory
   const pluginDirectories = yield* Effect.promise(() => localPluginDirectories(process.cwd(), global.config))

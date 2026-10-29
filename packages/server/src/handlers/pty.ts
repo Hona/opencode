@@ -15,7 +15,7 @@ import {
   PTY_CONNECT_TOKEN_HEADER,
   PTY_CONNECT_TOKEN_HEADER_VALUE,
 } from "@opencode/protocol/groups/pty"
-import { locationErrors, requestRef, response } from "../location"
+import { DefaultLocation, locationErrors, requestRef, response } from "../location"
 import { type Outbound, runPtySocket } from "./pty-socket"
 
 const notFound = (ptyID: Pty.ID) => new PtyNotFoundError({ ptyID, message: `PTY session not found: ${ptyID}` })
@@ -25,6 +25,7 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
     const locations = yield* LocationServiceMap.Service
     const tickets = yield* PtyTicket.Service
     const cors = yield* CorsConfig
+    const fallback = yield* DefaultLocation
 
     return handlers
       .handle(
@@ -106,7 +107,7 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
           if (!isAllowedRequestOrigin(ctx.request.headers.origin, ctx.request.headers.host, cors))
             return HttpServerResponse.empty({ status: 403 })
 
-          const ref = LocationServiceMap.canonical(requestRef(ctx.request))
+          const ref = LocationServiceMap.canonical(requestRef(ctx.request, fallback))
           const url = new URL(ctx.request.url, "http://localhost")
           const ticket = url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
           if (

@@ -25,7 +25,9 @@ import { Mcp } from "@opencode/core/mcp/index"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
+import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { AbsolutePath } from "@opencode/core/schema"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
@@ -46,7 +48,7 @@ import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
 import { schemaErrorLayer } from "./middleware/schema-error"
 import { ServerPairing } from "./pairing"
-import { layer } from "./location"
+import { DefaultLocation, layer } from "./location"
 import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
@@ -168,7 +170,14 @@ function makeRoutes<AuthError, AuthServices>(
     : build(overrides)
   return serviceLayer.pipe(
     Layer.flatMap((context) => {
-      const services = Layer.succeedContext(context)
+      const global = Context.get(context, Global.Service)
+      const services = Layer.succeedContext(
+        Context.add(
+          context,
+          DefaultLocation,
+          Location.Ref.make({ directory: AbsolutePath.make(options.directory ?? global.config) }),
+        ),
+      )
       const requestServices = Layer.merge(
         Layer.succeedContext(
           Context.pick(
@@ -180,7 +189,7 @@ function makeRoutes<AuthError, AuthServices>(
             WellKnown.Service,
           )(context),
         ),
-        ServerInfo.layer(serviceURLs, Context.get(context, Global.Service).tmp, options.app),
+        ServerInfo.layer(serviceURLs, { tmp: global.tmp, home: global.home, config: global.config }, options.app),
       )
       const api = HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
         Layer.provide(handlers.pipe(Layer.provide(services), Layer.provide(Layer.succeed(CorsConfig, options)))),

@@ -10,7 +10,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
-import { locationErrors, requestRef, response } from "../location"
+import { DefaultLocation, locationErrors, requestRef, response } from "../location"
 import { type Outbound, runPtySocket } from "./pty-socket"
 
 const notFound = <A, R>(effect: Effect.Effect<A, Mcp.NotFoundError, R>) =>
@@ -21,6 +21,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
     const locations = yield* LocationServiceMap.Service
     const cors = yield* CorsConfig
     const tickets = yield* PtyTicket.Service
+    const fallback = yield* DefaultLocation
 
     return handlers
       .handle(
@@ -95,7 +96,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
             return HttpServerResponse.empty({ status: 403 })
 
           const name = ctx.query.name
-          const ref = LocationServiceMap.canonical(requestRef(ctx.request))
+          const ref = LocationServiceMap.canonical(requestRef(ctx.request, fallback))
           if (
             ctx.query.ticket &&
             !(yield* tickets.consume({

@@ -306,9 +306,17 @@ function createServerController(
       .get({ location: { directory } })
       .then(async (location) => {
         await sync.project.refresh()
-        projects.touch(location.project.id)
 
-        return list().find((project) => project.id === location.project.id)
+        // The `global` ID is shared, and the global scope (the global config directory) records no project at all.
+        const project = list().find(
+          (project) =>
+            project.id === location.project.id &&
+            (project.id !== "global" || pathKey(project.worktree) === pathKey(location.project.directory)),
+        )
+
+        if (project || location.project.id !== "global") projects.touch(location.project.id)
+
+        return project
       })
       .catch((error) => {
         showToast({

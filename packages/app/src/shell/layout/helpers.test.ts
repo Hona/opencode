@@ -5,6 +5,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 
 const serverKey = ServerConnection.Key.make
 
+// SAFETY: project attribution reads only these session fields.
 const session = (input: Partial<SessionInfo> & Pick<SessionInfo, "id"> & { directory: string }) =>
   ({
     projectID: "project",
@@ -43,6 +44,16 @@ describe("layout workspace helpers", () => {
     expect(
       projectForSession(session({ id: "feature", directory: "/workspaces/feature/packages/app" }), [project]),
     ).toBe(project)
+  })
+
+  test("attributes a `global` session only to a `global` project that contains its directory", () => {
+    const empty = { id: "global", worktree: "/repos/empty", sandboxes: [] }
+    const scope = session({ id: "scope", projectID: "global", directory: "/home/luke/.config/opencode" })
+
+    expect(projectForSession(scope, [empty])).toBeUndefined()
+    expect(
+      projectForSession(session({ id: "nested", projectID: "global", directory: "/repos/empty/src" }), [empty]),
+    ).toBe(empty)
   })
 
   test("scopes home project selection by server", () => {

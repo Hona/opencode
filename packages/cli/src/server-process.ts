@@ -107,6 +107,9 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           },
           hostname,
           port,
+          // A foreground server acts for the directory it was started in. The shared service has no such directory,
+          // so requests that name no Location use the global scope rather than its working directory.
+          directory: options.mode === "service" ? undefined : process.cwd(),
           cors: options.cors ?? config.cors,
           password,
           pty: { handoff },

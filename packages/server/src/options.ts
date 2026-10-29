@@ -14,6 +14,8 @@ export const ServerOptions = Schema.Struct({
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(65_535))),
   password: Schema.optional(Schema.String),
+  // Location for requests that name none. Without it they use the global scope: the global config directory.
+  directory: Schema.optional(Schema.String),
   cors: Schema.optional(Schema.Array(Schema.String)),
   simulation: Schema.optional(Schema.Boolean),
   database: Schema.optional(Database.Options),

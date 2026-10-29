@@ -9,7 +9,11 @@ export const LocationQuery = Schema.Struct({
       directory: Schema.optional(Schema.String),
     }),
   ),
-}).annotate({ identifier: "LocationQuery" })
+}).annotate({
+  identifier: "LocationQuery",
+  description:
+    "The Location to act in. When omitted or empty, the server uses its default Location: the directory it was started with, or else the global scope rooted at the global config directory, which loads only global configuration.",
+})
 
 export const locationQueryOpenApi = OpenApi.annotations({
   transform: (operation) => {
@@ -43,7 +47,8 @@ export const makeLocationGroup = <LocationId extends HttpApiMiddleware.AnyId, Lo
           OpenApi.annotations({
             identifier: "location.get",
             summary: "Get location",
-            description: "Resolve the requested location or the server default location.",
+            description:
+              "Resolve the requested location. Without one, resolve the server default location: the directory the server was started with, or else the global scope at the global config directory, whose project ID is `global`.",
           }),
         ),
     )

@@ -538,6 +538,35 @@ describe("ConfigInstructionPlugin.Plugin", () => {
     ),
   )
 
+  it.live("reads no ancestor instructions in the global scope", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const home = path.join(tmp.path, "home")
+        const global = path.join(home, ".config", "opencode")
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => fs.mkdir(global, { recursive: true }))
+          yield* start()
+          const watcher = yield* Watcher.Test
+          expect(yield* watcher.subscriptions()).toEqual([{ path: path.join(global, "AGENTS.md"), type: "file" }])
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: global,
+              home,
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of({ ...location({ directory: AbsolutePath.make(global) }), global: true }),
+              ),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
   // A client CWD can spell the drive `c:` while git reports the project root as `C:`.
   ;(process.platform === "win32" ? it.live : it.live.skip)(
     "stops at the project root when the location drive letter differs in case",

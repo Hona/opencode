@@ -11,6 +11,11 @@ export const ServerInfo = Schema.Struct({
   urls: Schema.Array(Schema.String),
   paths: Schema.Struct({
     tmp: Schema.String,
+    // Optional so clients still decode servers that predate them.
+    home: Schema.optional(Schema.String),
+    // The global config directory. It roots the global scope, where requests that name no Location resolve
+    // unless the server was started with a directory.
+    config: Schema.optional(Schema.String),
   }),
   // Optional at every level so clients still decode servers that predate a capability.
   capabilities: Schema.optional(

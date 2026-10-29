@@ -5,13 +5,15 @@ import path from "node:path"
 import { Agent } from "@opencode/schema/agent"
 import { Integration } from "@opencode/schema/integration"
 import { ServerInfo } from "@opencode/protocol/groups/server"
-import { Effect, Schedule, Schema } from "effect"
+import { Effect, Schedule, Schema, Struct } from "effect"
 import { Session } from "@opencode/schema/session"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
 
+// Like `opencode serve`, act for the working directory when a request names no Location.
 const options = {
+  directory: process.cwd(),
   app: { version: "test-version" },
   database: { path: ":memory:" },
   config: { project: false },
@@ -217,6 +219,38 @@ it.live("serves the HttpApi and enforces Basic auth like the Node server", () =>
     expect(body.version).toBe("test-version")
     expect(body.paths.tmp).toEndWith("opencode")
     expect(body.capabilities?.persistentPty).toBe(true)
+  }),
+)
+
+// A shared service has no directory of its own. Its working directory must not become a Location, or every
+// locationless request (Desktop's plugin listing, for one) boots every global plugin over the home directory.
+it.live("resolves requests that name no Location to the server directory, else the global scope", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-default-location-")))
+    const global = path.join(tmp.path, "config")
+    const project = path.join(tmp.path, "project")
+    yield* Effect.promise(() => fs.mkdir(project))
+    const service = Struct.omit(options, ["directory"])
+    const request = (handler: (request: Request) => Promise<Response>, url: string, init?: RequestInit) =>
+      Effect.promise(() =>
+        handler(new Request(`http://opencode.local${url}`, init)).then((response) => response.json()),
+      )
+
+    const shared = yield* ServerFetch.make({ ...service, config: { directory: global, project: false } })
+    expect(yield* request(shared, "/api/location")).toMatchObject({ directory: global, project: { id: "global" } })
+    expect(yield* request(shared, "/api/location?location[directory]=")).toMatchObject({ directory: global })
+    expect(
+      yield* request(shared, "/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      }),
+    ).toMatchObject({ data: { location: { directory: global } } })
+    expect(yield* request(shared, "/api/debug/location")).toEqual([{ directory: global }])
+    expect(yield* request(shared, "/api/info")).toMatchObject({ paths: { config: global, home: expect.any(String) } })
+
+    const foreground = yield* ServerFetch.make({ ...service, directory: project, config: { directory: global } })
+    expect(yield* request(foreground, "/api/location")).toMatchObject({ directory: project })
   }),
 )
 

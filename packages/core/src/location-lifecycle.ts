@@ -29,9 +29,10 @@ const layer = Layer.effect(
     const rpc = yield* Rpc.Service
     const project = yield* Project.Service
     const scope = yield* Effect.scope
-    yield* project.activate(location.project.id)
+    // The global scope shares the `global` ID with repositories that have no root commit; it must not mark them active.
+    if (!location.global) yield* project.activate(location.project.id)
     const unsubscribe = yield* bus.listen((event) => {
-      if (!isSessionEvent(event) || !event.location) return Effect.void
+      if (location.global || !isSessionEvent(event) || !event.location) return Effect.void
       const ref = LocationServiceMap.canonical(event.location)
       if (ref.directory !== location.directory || ref.workspaceID !== location.workspaceID) return Effect.void
       // Listeners run inside publish; keep the write and its Project event off that path.

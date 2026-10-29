@@ -2,17 +2,23 @@ import { Context, Layer } from "effect"
 import { networkInterfaces } from "node:os"
 import type { ServerOptions } from "./options"
 
+export interface Paths {
+  readonly tmp: string
+  readonly home: string
+  readonly config: string
+}
+
 export class Service extends Context.Service<
   Service,
   {
     readonly urls: () => ReadonlyArray<string>
     readonly app: NonNullable<ServerOptions["app"]>
-    readonly paths: { readonly tmp: string }
+    readonly paths: Paths
   }
 >()("@opencode/server/ServerInfo") {}
 
-export function layer(urls: () => ReadonlyArray<string>, tmp: string, app: ServerOptions["app"] = {}) {
-  return Layer.succeed(Service, Service.of({ urls, app, paths: { tmp } }))
+export function layer(urls: () => ReadonlyArray<string>, paths: Paths, app: ServerOptions["app"] = {}) {
+  return Layer.succeed(Service, Service.of({ urls, app, paths }))
 }
 
 export function connectionURLs(value: string, requestedHostname?: string) {

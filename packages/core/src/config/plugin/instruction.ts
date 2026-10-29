@@ -36,7 +36,8 @@ export const Plugin = define({
       const start = yield* fs.resolve(location.directory)
       const root = yield* fs.resolve(location.project.directory)
       const home = yield* fs.resolve(global.home)
-      const project = discovery.project && FSUtil.contains(root, start)
+      // The global scope has no project, so no ancestor AGENTS.md (such as one in the home directory) applies there.
+      const project = !location.global && discovery.project && FSUtil.contains(root, start)
       const stop = FSUtil.contains(home, start) ? home : root
       const globalFile = yield* fs.resolve(join(global.config, "AGENTS.md"))
       const loaded: { current: Loaded } = { current: { type: "available", files: [] } }

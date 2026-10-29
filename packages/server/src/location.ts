@@ -5,7 +5,7 @@ import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { LocationNotFoundError, InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
-import { Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
 import { missingSession } from "./handlers/session-error"
@@ -68,11 +68,17 @@ export const sessionInfo = Effect.fnUntraced(function* (sessions: Session.Interf
   return yield* sessions.get(id).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
 })
 
-export function requestRef(request: HttpServerRequest.HttpServerRequest): Location.Ref {
+// Where requests that name no Location resolve: the server's configured directory, else the global scope.
+export class DefaultLocation extends Context.Service<DefaultLocation, Location.Ref>()(
+  "@opencode/server/DefaultLocation",
+) {}
+
+export function requestRef(request: HttpServerRequest.HttpServerRequest, fallback: Location.Ref): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
   const directory =
     query.get("location[directory]") ||
-    (request.headers["x-opencode-directory"] ? decode(request.headers["x-opencode-directory"]) : process.cwd())
+    (request.headers["x-opencode-directory"] ? decode(request.headers["x-opencode-directory"]) : undefined)
+  if (!directory) return fallback
   return Location.Ref.make({
     directory: AbsolutePath.make(directory),
   })
@@ -90,10 +96,11 @@ export const layer = Layer.effect(
   LocationMiddleware,
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
+    const fallback = yield* DefaultLocation
     return LocationMiddleware.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))), locationErrors)
+        return yield* effect.pipe(Effect.provide(locations.get(requestRef(request, fallback))), locationErrors)
       }),
     )
   }),

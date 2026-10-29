@@ -5,7 +5,7 @@ export type ServerInfo = {
   pid: number
   hostname?: string | undefined
   urls: Array<string>
-  paths: { tmp: string }
+  paths: { tmp: string; home?: string | undefined; config?: string | undefined }
   capabilities?: { persistentPty?: boolean | undefined } | undefined
 }
 

@@ -176,6 +176,8 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       initialize: Effect.fn("Vcs.initialize")(function* (providerID: string) {
+        // The global scope roots at the global config directory, which is not a project to put under version control.
+        if (location.global) return yield* new InitializeError({ kind: "unsupported" })
         if (!(yield* fs.isDir(location.project.directory))) return yield* new InitializeError({ kind: "missing" })
         if (yield* Project.root(fs, location.project.directory)) return yield* new InitializeError({ kind: "conflict" })
         const provider = state.get().providers.get(providerID)
