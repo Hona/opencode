@@ -88,18 +88,8 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     media.dispose()
   })
 
-  if (server.type === "plugin") {
-    createEffect(
-      on(
-        () => `${server.http.url}\0${server.http.password ?? ""}`,
-        () => transport.update(server.http),
-        { defer: true },
-      ),
-    )
-  }
-
   const events = createOpenCodeEventSource()
-  const reconnect = server.type === "plugin" || server.type === "sidecar" ? server.reconnect : undefined
+  const reconnect = resolveEndpoint(server)
 
   const connection = createClientConnection(transport.api, {
     reconnect: reconnect ? async (signal) => transport.update(await reconnect(signal)) : undefined,
@@ -111,10 +101,27 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     log: {
       info(message, data) {
         if (message !== "event stream disconnected") return
-        console.info("[global-sdk] event stream disconnected", { url: transport.url, managed: !!reconnect, ...data })
+        const managed = server.type === "plugin" ? server.managed : !!reconnect
+        console.info("[global-sdk] event stream disconnected", { url: transport.url, managed, ...data })
       },
     },
   })
+
+  // The plugin reports a new endpoint: requests use it at once, and a connected stream moves to it now. An endpoint
+  // the stream's own reconnect already moved to needs neither.
+  if (server.type === "plugin") {
+    createEffect(
+      on(
+        () => `${server.http.url}\0${server.http.password ?? ""}`,
+        () => {
+          if (sameEndpoint(transport.http, server.http)) return
+          transport.update(server.http)
+          connection.internal.resync("Server endpoint changed")
+        },
+        { defer: true },
+      ),
+    )
+  }
 
   return {
     server,
@@ -135,6 +142,25 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     connection,
     event: events.event,
   }
+}
+
+/**
+ * Where the event stream connects after a disconnect. A plugin's server can exist before the plugin reports its
+ * endpoint (a server restored from the plugin's last inventory starts on a placeholder) and can move at any time, so
+ * its stream always resolves the plugin's current endpoint, through the plugin's `reconnect` when it has one then.
+ */
+function resolveEndpoint(
+  server: ServerConnection.Any,
+): ((signal: AbortSignal) => Promise<ServerConnection.HttpBase>) | undefined {
+  if (server.type === "plugin") return (signal) => server.reconnect?.(signal) ?? Promise.resolve(server.http)
+
+  if (server.type === "sidecar") return server.reconnect
+
+  return undefined
+}
+
+function sameEndpoint(a: ServerConnection.HttpBase, b: ServerConnection.HttpBase) {
+  return a.url === b.url && a.password === b.password
 }
 
 /** A server's HTTP and PTY clients, rebuilt when its endpoint changes. */
@@ -167,6 +193,7 @@ export function createServerTransport(input: {
 
   return {
     update(http: ServerConnection.HttpBase) {
+      if (sameEndpoint(http, state.current.http)) return state.current.api
       state.current = build(http)
 
       return state.current.api
